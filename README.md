@@ -208,6 +208,23 @@ node tools\memory.mjs search 语音 --days 30        # 搜回来
 node tools\memory.mjs days                         # 有哪些天
 ```
 
+## 关于我
+
+存档目录里可以放一份 `关于我.md`：提炼过的稳定事实。住哪、做什么、讨厌什么、别拿什么话敷衍。
+
+```powershell
+node tools\memory.mjs me                              # 读
+node tools\memory.mjs me add "讨厌坐车" --section 基本  # 加一条
+node tools\memory.mjs me forget 坐车                   # 删掉含这个词的行
+node tools\memory.mjs me confirm                       # 把「最后确认」改成今天
+```
+
+**为什么不跟聊天记录放一起**：记录要**搜**才有人读，这份要**每次开场就读**。
+混在一起，前者会把后者淹掉。
+
+写入前自动备份成 `关于我.md.bak`，写的时候先写 `.tmp` 再改名。
+技能里写死了「改完要告诉用户改了什么」——悄悄改记忆比不记更糟。
+
 ## 每天自动跑
 
 ```powershell

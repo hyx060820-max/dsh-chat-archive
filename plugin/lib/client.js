@@ -235,6 +235,30 @@ window.__ModuleLoader__.load({
 						}),
 					),
 				),
+				// 关于我
+				h(
+					"div",
+					{ className: "dsh-mem-card" },
+					h(
+						"div",
+						{ className: "dsh-mem-row" },
+						h(
+							"div",
+							{ className: "dsh-mem-grow" },
+							h("div", { className: "dsh-mem-name" }, "关于我"),
+							h(
+								"div",
+								{ className: "dsh-mem-meta" },
+								st.me && st.me.exists
+									? "最后改于 " + new Date(st.me.mtime).toLocaleString("zh-CN")
+									: "还没有。对 agent 说「记一下：我讨厌坐车」就会建起来",
+							),
+						),
+					),
+					st.me && st.me.exists
+						? h("pre", { className: "dsh-mem-pre", style: { maxHeight: 180 } }, st.me.text)
+						: null,
+				),
 				// 自动备份
 				h(
 					"div",

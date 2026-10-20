@@ -228,12 +228,21 @@ const readJson = (req) =>
     req.on('error', fail);
   });
 
+// 「关于我」：提炼过的稳定事实，和流水账分开放
+function meInfo(s) {
+  const f = join(expand(s.root), '关于我.md');
+  if (!existsSync(f)) return { exists: false, path: f };
+  const st = statSync(f);
+  return { exists: true, path: f, mtime: st.mtimeMs, text: readFileSync(f, 'utf8') };
+}
+
 function statePayload(s) {
   return {
     ok: true,
     settings: s,
     paths: { root: expand(s.root), repo: expand(s.repo) },
     node: process.version,
+    me: meInfo(s),
     dsh: scanDsh(join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'sessions')),
     lastLog: latestLog(s),
   };

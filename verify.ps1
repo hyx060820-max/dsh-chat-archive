@@ -221,7 +221,19 @@ try {
     $head = (Get-Content $sk -Encoding UTF8 -TotalCount 1)
     if ("$head".Trim() -ne '---') { throw 'SKILL.md 缺 frontmatter' }
     if (-not (Get-Content $sk -Raw -Encoding UTF8).Contains('{{REPO}}')) { throw 'SKILL.md 里没有 {{REPO}} 占位，装的时候就没法替换' }
-    'usage 与占位符都在'
+
+    # 关于我：建、加、删，三步都要真的动文件
+    $mr = Join-Path $work 'me-root'
+    $cli = Join-Path $repo 'tools/memory.mjs'
+    & node $cli me add '验收一条' --root $mr 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "me add 失败 exit $LASTEXITCODE" }
+    $meFile = Join-Path $mr '关于我.md'
+    if (-not (Test-Path $meFile)) { throw 'me add 没建出 关于我.md' }
+    if (-not (Get-Content $meFile -Raw -Encoding UTF8).Contains('验收一条')) { throw 'me add 的内容没写进去' }
+    & node $cli me forget 验收 --root $mr 2>&1 | Out-Null
+    if ((Get-Content $meFile -Raw -Encoding UTF8).Contains('验收一条')) { throw 'me forget 没删掉' }
+
+    'usage、占位符、关于我 读写都在'
   }
 
   # ── 7d. 界面服务 ──

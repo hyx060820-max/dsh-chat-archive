@@ -29,7 +29,35 @@ node "{{REPO}}\tools\memory.mjs" search 关键词 --days 30 --limit 20
 
 # 有哪些天
 node "{{REPO}}\tools\memory.mjs" days
+
+# 关于我：提炼过的事实，不是流水账
+node "{{REPO}}\tools\memory.mjs" me
+node "{{REPO}}\tools\memory.mjs" me add "讨厌坐车" --section 基本
+node "{{REPO}}\tools\memory.mjs" me forget 坐车
+node "{{REPO}}\tools\memory.mjs" me confirm
 ```
+
+## 关于我
+
+存档目录里有一份 `关于我.md`。它是**提炼过的稳定事实**：住哪、做什么、讨厌什么、别拿什么话敷衍。
+
+和聊天记录不是一回事：
+
+| | 聊天记录 | 关于我 |
+|---|---|---|
+| 内容 | 每天每一句 | 几句结论 |
+| 怎么用 | 需要时去搜 | **每次新对话先读** |
+
+规则：
+
+1. **新对话开始，先读它**：`node "{{REPO}}\tools\memory.mjs" me`
+2. 读不到就说没有。**不要假装读过，也不要凭印象补**
+3. 用户说出新的事实 → `me add "…"`，`--section` 可选 `基本` / `偏好` / `别踩的`
+4. 用户说「记错了」→ 先 `me forget 关键词`，再 `me add` 正确的
+5. **改完要跟用户说一句改了什么。** 悄悄改记忆比不记更糟
+6. 「最后确认」超过 90 天，可以问一句「这些还准吗」
+
+每次写入前会自动备份成 `关于我.md.bak`。写坏了能退回去。
 
 存档默认在 `~/dsh-memory`，一天一个目录：
 
