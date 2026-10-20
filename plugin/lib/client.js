@@ -50,6 +50,8 @@ window.__ModuleLoader__.load({
 }
 .dsh-mem-fill:hover { background: rgba(127,127,127,.12); border-color: rgba(127,127,127,.45); opacity: 1; }
 .dsh-mem-fill:active { background: rgba(127,127,127,.18); }
+.dsh-mem-fill.used { opacity: .45; }
+.dsh-mem-fill.used:hover { opacity: 1; }
 .dsh-mem-fill.done { border-color: rgba(200,118,63,.65); background: rgba(200,118,63,.14); opacity: 1; }
 .dsh-mem-hint { font-size: 12px; opacity: .7; }
 .dsh-mem-note { padding: 12px 14px; border-radius: 10px; border: 1px dashed rgba(127,127,127,.45); background: rgba(200,118,63,.07); }
@@ -272,7 +274,7 @@ window.__ModuleLoader__.load({
 					h(
 						"div",
 						{ className: "dsh-mem-hint", style: { marginTop: 8 } },
-						"只是藏起来，功能还在。一个会话点一次就够——掉细节的时候补，不用每轮点。",
+						"只是藏起来，功能还在。一个对话每天一次就够——掉细节的时候补，不用每轮点。",
 					),
 				),
 				// 关于我
@@ -501,22 +503,48 @@ window.__ModuleLoader__.load({
 			return btnShow.value;
 		}
 
+		const LAST_KEY = "dsh-memory:lastFill";
+		const today = () => {
+			const d = new Date();
+			const p = (n) => String(n).padStart(2, "0");
+			return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
+		};
+		const filledToday = () => {
+			try {
+				return localStorage.getItem(LAST_KEY) === today();
+			} catch {
+				return false;
+			}
+		};
+
 		function ReadButton() {
 			const show = useBtnShow();
 			const [done, setDone] = react.useState(false);
 			const [failed, setFailed] = react.useState(false);
+			const [todayDone, setTodayDone] = react.useState(filledToday);
 			const click = () => {
 				const ok = fillComposer(FILL_TEXT);
 				setFailed(!ok);
 				setDone(ok);
+				if (ok) {
+					try {
+						localStorage.setItem(LAST_KEY, today());
+					} catch {
+						/* 存不了就算了 */
+					}
+					setTodayDone(true);
+				}
 				setTimeout(() => {
 					setDone(false);
 					setFailed(false);
 				}, 1800);
 			};
+			const tip = todayDone
+				? "今天已经填过一次了。要再补也行，一天一次通常就够"
+				: "一个对话每天一次就够。把「" + FILL_TEXT + "」填进输入框，回车发送";
 			if (!show) return null;
 			const label = failed ? "没找到输入框" : done ? "已填入，回车" : "读关于我";
-			return h("button", { className: "dsh-mem-fill" + (done ? " done" : ""), onClick: click, title: "一个会话点一次就够。把「" + FILL_TEXT + "」填进输入框，回车发送" }, label);
+			return h("button", { className: "dsh-mem-fill" + (done ? " done" : "") + (todayDone && !done ? " used" : ""), onClick: click, title: tip }, label);
 		}
 		const inject = ["slots"];
 
