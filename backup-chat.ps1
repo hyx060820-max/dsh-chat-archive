@@ -42,6 +42,10 @@ param(
   [string]$Exporter = '',
   [string]$AssistantName = '助理',
   [string]$UserName = '你',
+  # 只备份这几个工作区（DSH 的会话按工作区分目录）。留空 = 全都要
+  [string[]]$Workspace = @(),
+  # 同上，但用逗号串传。给不方便传数组的调用方（界面）用
+  [string]$WorkspaceList = '',
   [datetime]$Now = (Get-Date)
 )
 
@@ -56,6 +60,11 @@ if (-not $Exporter) { $Exporter = Join-Path $PSScriptRoot 'export-session.mjs' }
 if (-not $Pattern)  { $Pattern  = if ($Format -eq 'codex') { 'rollout-*.jsonl' } else { 'session.v4.jsonl.zstd' } }
 $RawExt = if ($Format -eq 'codex') { '.jsonl' } else { '.zstd' }
 
+# -WorkspaceList 只是 -Workspace 的字符串写法
+if ($Workspace.Count -eq 0 -and $WorkspaceList) {
+  $Workspace = @($WorkspaceList -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+}
+
 $LockPath  = Join-Path $Root '.lock'
 $today     = $Now.ToString('yyyy-MM-dd')
 $yesterday = $Now.AddDays(-1).ToString('yyyy-MM-dd')
@@ -69,8 +78,23 @@ if (-not (Test-Path $Exporter)) {
   exit 2
 }
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-  Write-Host '找不到 node。先装 Node.js 22.15 或更高版本。'
+  Write-Host '找不到 node。先装 Node.js。'
   exit 2
+}
+$nodeVer = "$(& node -v 2>$null)".Trim().TrimStart('v')
+if (-not $nodeVer) {
+  Write-Host '读不到 node 版本。'
+  exit 2
+}
+# DSH 的会话要 zstd 解压，node 22.15 之前没有这个 API。
+# 不猜版本号，直接问 node 自己——23.0 到 23.7 也没有，只看主版本号会判错。
+if ($Format -eq 'dsh') {
+  & node -e "process.exit(typeof require('node:zlib').zstdDecompressSync === 'function' ? 0 : 1)" 2>$null
+  if ($LASTEXITCODE -ne 0) {
+    Write-Host "这个 node（v$nodeVer）没有 zstd 解压。DSH 的会话读不了。"
+    Write-Host '要 v22.15 以上，或 v23.8 以上。Codex 的会话不受影响（-Format codex）。'
+    exit 2
+  }
 }
 
 New-Item -ItemType Directory -Force -Path $Root | Out-Null
@@ -98,6 +122,7 @@ $log.Add("# $today 备份记录")
 $log.Add("")
 $log.Add("执行时间：$($Now.ToString('yyyy-MM-dd HH:mm:ss'))")
 $log.Add("来源格式：$Format")
+$log.Add("Node：v$nodeVer")
 $log.Add("会话目录：$Sessions")
 $log.Add("输出目录：$Root")
 $log.Add("")
@@ -106,6 +131,18 @@ $countPat = '^\[\d{2}:\d{2}\] '
 
 try {
   $all = @(Get-ChildItem $Sessions -Recurse -File -Filter $Pattern -ErrorAction SilentlyContinue)
+
+  # ── 只看指定的工作区 ──
+  if ($Workspace.Count -gt 0 -and $all.Count -gt 0) {
+    $base0 = $Sessions.TrimEnd('\')
+    $all = @($all | Where-Object {
+        $rel0 = $_.FullName.Substring($base0.Length).TrimStart('\')
+        $parts0 = $rel0 -split '\\'
+        $parts0.Count -ge 2 -and ($Workspace -contains $parts0[0])
+      })
+    $log.Add('限定工作区：' + ($Workspace -join ', '))
+    $log.Add('')
+  }
 
   # ── 挑要备份的会话 ──
   $targets = @()
@@ -245,8 +282,20 @@ $log.Add('看聊天：聊天\<日期>.txt　图片：图片\　追查：完整\�
 
 $logDir = Join-Path $Root $today
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
-$logFile = Join-Path $logDir '备份记录.md'
+
+# 每个来源一份，最后合并成 备份记录.md。
+# 否则两个来源各跑一遍，后跑的会把先跑的记录盖掉。
+$logFile = Join-Path $logDir ("备份记录-{0}.md" -f $Format)
 Set-Content -Path $logFile -Value $log -Encoding UTF8
+
+$merged = Join-Path $logDir '备份记录.md'
+$parts = @()
+foreach ($f in (Get-ChildItem $logDir -Filter '备份记录-*.md' | Sort-Object Name)) {
+  $parts += ('<!-- 来源：{0} -->' -f $f.BaseName.Replace('备份记录-', ''))
+  $parts += (Get-Content $f.FullName -Encoding UTF8 -Raw).TrimEnd()
+  $parts += ''
+}
+Set-Content -Path $merged -Value ($parts -join "`r`n") -Encoding UTF8
 
 if ($problems.Count -gt 0) {
   Write-Host "备份完成，但有 $($problems.Count) 处需要看：$logFile"

@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>聊天归档</title>
+<style>
+  :root {
+    --bg: #0e1014;
+    --panel: #15181e;
+    --panel-2: #1b1f27;
+    --line: #262b35;
+    --text: #e6e9ef;
+    --dim: #8b93a3;
+    --accent: #c8763f;
+    --ok: #4f9d69;
+    --bad: #c4534a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 28px 20px 60px;
+    background: var(--bg); color: var(--text);
+    font: 14px/1.6 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  }
+  .wrap { max-width: 940px; margin: 0 auto; }
+  header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 4px; }
+  h1 { font-size: 19px; font-weight: 600; margin: 0; letter-spacing: .5px; }
+  .sub { color: var(--dim); font-size: 12px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+  .dot.on { background: var(--ok); }
+  .dot.off { background: var(--bad); }
+
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: 16px 18px; margin-top: 14px;
+  }
+  .card.off { opacity: .55; }
+  .row { display: flex; align-items: center; gap: 10px; }
+  .grow { flex: 1; }
+  .name { font-weight: 600; }
+  .meta { color: var(--dim); font-size: 12px; }
+
+  /* 开关 */
+  .sw { position: relative; width: 38px; height: 21px; flex: none; cursor: pointer; }
+  .sw input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .sw i {
+    position: absolute; inset: 0; background: #2a2f3a;
+    border-radius: 999px; transition: background .15s;
+  }
+  .sw i::after {
+    content: ""; position: absolute; top: 3px; left: 3px;
+    width: 15px; height: 15px; border-radius: 50%;
+    background: #7d8797; transition: transform .15s, background .15s;
+  }
+  .sw input:checked + i { background: rgba(200,118,63,.32); }
+  .sw input:checked + i::after { transform: translateX(17px); background: var(--accent); }
+  .sw input:focus-visible + i { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* 工作区 */
+  .ws-head {
+    display: flex; align-items: center; gap: 8px;
+    margin: 14px 0 6px; padding-top: 12px; border-top: 1px solid var(--line);
+    color: var(--dim); font-size: 12px;
+  }
+  .ws-list { max-height: 268px; overflow: auto; margin: 0 -6px; }
+  .ws {
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 8px; border-radius: 7px; cursor: pointer;
+  }
+  .ws:hover { background: var(--panel-2); }
+  .ws input { accent-color: var(--accent); width: 15px; height: 15px; flex: none; }
+  .ws .n { font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; }
+  .ws .tag { color: var(--dim); font-size: 11.5px; margin-left: auto; white-space: nowrap; }
+  .empty { color: var(--dim); font-size: 12.5px; padding: 8px; }
+
+  /* 表单 */
+  .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
+  .fields label { display: block; font-size: 12px; color: var(--dim); margin-bottom: 5px; }
+  input[type=text] {
+    width: 100%; padding: 8px 10px; border-radius: 7px;
+    background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
+    font: inherit; font-size: 13px;
+  }
+  input[type=text]:focus { outline: none; border-color: var(--accent); }
+  .wide { grid-column: 1 / -1; }
+
+  /* 按钮 */
+  .bar { display: flex; align-items: center; gap: 10px; margin-top: 16px; }
+  button {
+    font: inherit; font-size: 13px; padding: 8px 16px; border-radius: 7px;
+    border: 1px solid var(--line); background: var(--panel-2); color: var(--text);
+    cursor: pointer; transition: border-color .15s, background .15s;
+  }
+  button:hover:not(:disabled) { border-color: #3a4150; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #1a1206; font-weight: 600; }
+  button.primary:hover:not(:disabled) { background: #d8864d; }
+  button:disabled { opacity: .5; cursor: default; }
+  .hint { color: var(--dim); font-size: 12px; }
+  .hint.dirty { color: var(--accent); }
+
+  pre {
+    background: #0b0d11; border: 1px solid var(--line); border-radius: 8px;
+    padding: 12px 14px; margin: 12px 0 0; overflow: auto; max-height: 320px;
+    font: 12.5px/1.55 ui-monospace, Consolas, monospace; color: #c6ccd8; white-space: pre-wrap;
+  }
+  .result-head { display: flex; align-items: center; gap: 8px; margin-top: 16px; font-size: 12px; color: var(--dim); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>聊天归档</h1>
+    <span class="sub" id="env">读取中…</span>
+  </header>
+
+  <div id="sources"></div>
+
+  <div class="card">
+    <div class="row" style="margin-bottom:12px">
+      <span class="name">输出</span>
+      <span class="meta grow">存档放在哪儿，文本里怎么称呼双方</span>
+    </div>
+    <div class="fields">
+      <div class="wide">
+        <label>输出目录</label>
+        <input type="text" id="root">
+      </div>
+      <div>
+        <label>助手显示名</label>
+        <input type="text" id="assistantName">
+      </div>
+      <div>
+        <label>用户显示名</label>
+        <input type="text" id="userName">
+      </div>
+    </div>
+  </div>
+
+  <div class="bar">
+    <button class="primary" id="run">立即备份</button>
+    <button id="save">保存</button>
+    <span class="hint" id="hint"></span>
+  </div>
+
+  <div id="result"></div>
+</div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+let state = null;
+let dirty = false;
+
+const rel = (ms) => {
+  if (!ms) return '从没动过';
+  const d = Date.now() - ms;
+  const m = Math.floor(d / 60000);
+  if (m < 1) return '刚刚';
+  if (m < 60) return m + ' 分钟前';
+  if (m < 1440) return Math.floor(m / 60) + ' 小时前';
+  return Math.floor(m / 1440) + ' 天前';
+};
+
+function setDirty() {
+  dirty = true;
+  $('#hint').textContent = '有改动没保存';
+  $('#hint').className = 'hint dirty';
+}
+
+function clearDirty() {
+  dirty = false;
+  $('#hint').textContent = '';
+  $('#hint').className = 'hint';
+}
+
+function switchEl(on, fn, label) {
+  const w = document.createElement('label');
+  w.className = 'sw';
+  w.title = label;
+  const cb = document.createElement('input');
+  cb.type = 'checkbox';
+  cb.checked = on;
+  cb.addEventListener('change', () => { fn(cb.checked); setDirty(); });
+  const i = document.createElement('i');
+  w.append(cb, i);
+  return w;
+}
+
+function render() {
+  const box = $('#sources');
+  box.innerHTML = '';
+
+  // ── DSH ──
+  const sd = state.config.sources.dsh;
+  const card = document.createElement('div');
+  card.className = 'card' + (sd.enabled ? '' : ' off');
+
+  const head = document.createElement('div');
+  head.className = 'row';
+  const title = document.createElement('div');
+  title.className = 'grow';
+  title.innerHTML = '<div class="name">DSH</div>' +
+    '<div class="meta">' + (state.dsh.exists
+      ? state.dsh.workspaces.length + ' 个工作区，共 ' + state.dsh.workspaces.reduce((a, b) => a + b.sessions, 0) + ' 个会话'
+      : '没找到 ' + state.config.sources.dsh.sessions) + '</div>';
+  head.append(title, switchEl(sd.enabled, (v) => { sd.enabled = v; render(); }, '启用 DSH'));
+
+  // 工作区选择
+  const wsHead = document.createElement('div');
+  wsHead.className = 'ws-head';
+  const allOn = sd.all;
+  const allLabel = document.createElement('label');
+  allLabel.className = 'ws';
+  allLabel.style.cursor = 'pointer';
+  allLabel.style.padding = '0';
+  const allCb = document.createElement('input');
+  allCb.type = 'checkbox';
+  allCb.checked = allOn;
+  allCb.addEventListener('change', () => { sd.all = allCb.checked; setDirty(); render(); });
+  allLabel.append(allCb, document.createTextNode('全部工作区'));
+  wsHead.append(allLabel);
+  const count = document.createElement('span');
+  count.style.marginLeft = 'auto';
+  count.textContent = sd.all ? '全都要' : (sd.workspaces.length ? '选了 ' + sd.workspaces.length + ' 个' : '一个都没选');
+  wsHead.append(count);
+
+  const list = document.createElement('div');
+  list.className = 'ws-list';
+  const ws = state.dsh.workspaces ?? [];
+  if (!ws.length) {
+    list.innerHTML = '<div class="empty">这里没有工作区。</div>';
+  }
+  for (const w of ws) {
+    const row = document.createElement('label');
+    row.className = 'ws';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = sd.all || sd.workspaces.includes(w.name);
+    cb.disabled = sd.all || !sd.enabled;
+    cb.addEventListener('change', () => {
+      const i = sd.workspaces.indexOf(w.name);
+      if (cb.checked && i < 0) sd.workspaces.push(w.name);
+      if (!cb.checked && i >= 0) sd.workspaces.splice(i, 1);
+      setDirty(); render();
+    });
+    const n = document.createElement('span');
+    n.className = 'n';
+    n.textContent = w.label || w.name;
+    row.title = w.name;
+    const tag = document.createElement('span');
+    tag.className = 'tag';
+    tag.textContent = w.sessions + ' 个会话 · ' + rel(w.last);
+    row.append(cb, n, tag);
+    list.append(row);
+  }
+
+  card.append(head, wsHead, list);
+
+  // ── Codex ──
+  const sc = state.config.sources.codex;
+  const c2 = document.createElement('div');
+  c2.className = 'card' + (sc.enabled ? '' : ' off');
+  const h2 = document.createElement('div');
+  h2.className = 'row';
+  const t2 = document.createElement('div');
+  t2.className = 'grow';
+  t2.innerHTML = '<div class="name">Codex CLI</div>' +
+    '<div class="meta">' + (state.codex.exists
+      ? state.codex.files + ' 份 rollout · 最近 ' + rel(state.codex.last)
+      : '没找到 ' + state.config.sources.codex.sessions) + '</div>';
+  h2.append(t2, switchEl(sc.enabled, (v) => { sc.enabled = v; render(); }, '启用 Codex'));
+  c2.append(h2);
+
+  box.append(card, c2);
+
+  $('#root').value = state.config.root;
+  $('#assistantName').value = state.config.assistantName;
+  $('#userName').value = state.config.userName;
+  $('#env').textContent = 'node ' + state.node + ' · 只监听本机';
+}
+
+async function load() {
+  const r = await fetch('/api/state');
+  state = await r.json();
+  render();
+  if (state.lastLog) {
+    $('#result').innerHTML = '<div class="result-head">最近一份记录 · ' + state.lastLog.day + '</div>';
+    const pre = document.createElement('pre');
+    pre.textContent = state.lastLog.text;
+    $('#result').append(pre);
+  }
+}
+
+async function saveConfig() {
+  state.config.root = $('#root').value.trim();
+  state.config.assistantName = $('#assistantName').value.trim() || '助理';
+  state.config.userName = $('#userName').value.trim() || '你';
+  const r = await fetch('/api/config', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ config: state.config }),
+  });
+  const j = await r.json();
+  if (!r.ok) {
+    $('#hint').textContent = j.error ?? '保存失败';
+    $('#hint').className = 'hint dirty';
+    return false;
+  }
+  state.config = j.config;
+  clearDirty();
+  return true;
+}
+
+$('#save').addEventListener('click', async () => {
+  if (await saveConfig()) await load();
+});
+
+$('#run').addEventListener('click', async () => {
+  const btn = $('#run');
+  btn.disabled = true;
+  btn.textContent = '跑着…';
+  const box = $('#result');
+  box.innerHTML = '<div class="result-head">正在备份…</div>';
+  try {
+    // 先把当前设置存下来，免得跑的是旧配置
+    if (!(await saveConfig())) return;
+    const r = await fetch('/api/run', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+    const j = await r.json();
+    box.innerHTML = '';
+    if (!r.ok) {
+      box.innerHTML = '<div class="result-head" style="color:var(--bad)">' + (j.error ?? '失败') + '</div>';
+      return;
+    }
+    for (const res of j.results) {
+      const head = document.createElement('div');
+      head.className = 'result-head';
+      head.innerHTML = '<span class="dot ' + (res.code === 0 ? 'on' : 'off') + '"></span>' +
+        res.format + ' · 退出码 ' + res.code;
+      const pre = document.createElement('pre');
+      pre.textContent = res.out || '（没有输出）';
+      box.append(head, pre);
+    }
+    if (j.lastLog) {
+      const head = document.createElement('div');
+      head.className = 'result-head';
+      head.textContent = '备份记录 · ' + j.lastLog.day;
+      const pre = document.createElement('pre');
+      pre.textContent = j.lastLog.text;
+      box.append(head, pre);
+    }
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '立即备份';
+  }
+});
+
+for (const id of ['#root', '#assistantName', '#userName']) {
+  $(id).addEventListener('input', setDirty);
+}
+
+load().catch((e) => {
+  $('#env').textContent = '连不上服务：' + e.message;
+});
+</script>
+</body>
+</html>

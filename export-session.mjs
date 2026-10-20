@@ -66,9 +66,20 @@ if (!src || !dst) {
   console.error(USAGE);
   process.exit(2);
 }
-if (opts.day && !/^\d{4}-\d{2}-\d{2}$/.test(opts.day)) {
-  console.error(`--day 格式应为 YYYY-MM-DD，收到: ${opts.day}`);
-  process.exit(2);
+if (opts.day) {
+  // 光看格式不够：2026-13-99 也长得像日期
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(opts.day);
+  const d = m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])) : null;
+  const ok =
+    d &&
+    !Number.isNaN(d.getTime()) &&
+    d.getUTCFullYear() === +m[1] &&
+    d.getUTCMonth() + 1 === +m[2] &&
+    d.getUTCDate() === +m[3];
+  if (!ok) {
+    console.error(`--day 不是有效日期：${opts.day}（要 YYYY-MM-DD，例如 2026-10-20）`);
+    process.exit(2);
+  }
 }
 if (!fs.existsSync(src)) { console.error(`输入不存在: ${src}`); process.exit(3); }
 
@@ -94,9 +105,19 @@ for (const w of parsed.warnings ?? []) console.error(`警告: ${w}`);
 const { meta, items: allItems } = parsed;
 
 const pad = (n) => String(n).padStart(2, '0');
-const dayKey = (ms) => { const d = new Date(ms); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
-const hhmm = (ms) => { const d = new Date(ms); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
-const full = (ms) => `${dayKey(ms)} ${hhmm(ms)}`;
+const isTime = (ms) => typeof ms === 'number' && Number.isFinite(ms);
+const dayKey = (ms) => {
+  if (!isTime(ms)) return '?';
+  const d = new Date(ms);
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+const hhmm = (ms) => {
+  if (!isTime(ms)) return '--:--';
+  const d = new Date(ms);
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+// 时间缺失时不要吐 NaN-NaN-NaN，说得清楚一点
+const full = (ms) => (isTime(ms) ? `${dayKey(ms)} ${hhmm(ms)}` : '时间未知');
 const stripCode = (s) => s.replace(/```[\s\S]*?```/g, '\n〔代码略〕\n').replace(/\n{3,}/g, '\n\n').trim();
 const shortHash = (id) => String(id).replace(/^sha256:/, '').slice(0, 12);
 const whoOf = (role) => (role === 'user' ? opts.userName : role === 'assistant' ? opts.assistantName : '');

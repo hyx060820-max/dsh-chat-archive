@@ -149,6 +149,78 @@ try {
     'exit 4'
   }
 
+  # ── 7b. 日期参数要严 ──
+  Test-Check '空日期不写文件' {
+    if (-not $dshFile) { return 'SKIP: 没有样本' }
+    $out = Join-Path $work 'empty.txt'
+    & node $exporter $dshFile.FullName $out --txt --day '1999-01-01' 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "exit $LASTEXITCODE" }
+    if (Test-Path $out) { throw '没有消息的日期居然写出了文件' }
+    '不写'
+  }
+
+  Test-Check '假日期要拒绝' {
+    if (-not $dshFile) { return 'SKIP: 没有样本' }
+    & node $exporter $dshFile.FullName (Join-Path $work 'x.txt') --txt --day '2026-13-99' 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 2) { throw "期望 exit 2，实际 $LASTEXITCODE" }
+    'exit 2'
+  }
+
+  # ── 7c. 钩子得真的挂上 ──
+  Test-Check '钩子挂好了' {
+    $rel = '.githooks/pre-push'
+    if (-not (Test-Path (Join-Path $repo $rel))) { throw '缺 .githooks/pre-push' }
+    $mode = "$(git -C $repo ls-files -s $rel 2>$null)"
+    if ($mode -notmatch '^100755') { throw '钩子没有可执行位，重新 git add 一次' }
+    $cfg = "$(git -C $repo config --local core.hooksPath 2>$null)"
+    if ($cfg -ne '.githooks') { return 'SKIP: 这台机器没设 core.hooksPath，push 时不会自动验证' }
+    '已启用'
+  }
+
+  # ── 7c2. DSH 插件 ──
+  Test-Check '插件文件' {
+    $dir = Join-Path $repo 'plugin'
+    if (-not (Test-Path $dir)) { return 'SKIP: 没有 plugin/ 目录' }
+    $js = @(Get-ChildItem (Join-Path $dir 'lib') -Filter '*.js' -File -ErrorAction SilentlyContinue)
+    if ($js.Count -lt 2) { throw "plugin/lib 里只有 $($js.Count) 个 js 文件" }
+    foreach ($f in $js) {
+      & node --check $f.FullName 2>&1 | Out-Null
+      if ($LASTEXITCODE -ne 0) { throw "$($f.Name) 语法错误" }
+    }
+    $pkg = Get-Content (Join-Path $dir 'package.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+    if (-not $pkg.dsh.client) { throw 'package.json 缺 dsh.client' }
+    if (-not $pkg.dsh.bundle) { throw 'package.json 缺 dsh.bundle' }
+    if (-not (Test-Path (Join-Path $dir 'cordis.patch.yml'))) { throw '缺 cordis.patch.yml' }
+    "$($js.Count) 个文件通过"
+  }
+
+  # ── 7d. 界面服务 ──
+  Test-Check '界面服务能起来' {
+    if (-not (Test-Path (Join-Path $repo 'ui/index.html'))) { throw '缺 ui/index.html' }
+    $port = 7700 + (Get-Random -Maximum 200)
+    $env:PORT = $port
+    $proc = Start-Process node -ArgumentList (Join-Path $repo 'server.mjs') -PassThru -WindowStyle Hidden
+    try {
+      $st = $null
+      for ($i = 0; $i -lt 40; $i++) {
+        Start-Sleep -Milliseconds 250
+        try {
+          $st = Invoke-RestMethod "http://127.0.0.1:$port/api/state" -TimeoutSec 2
+          break
+        } catch {
+          # 还没起来，接着等
+        }
+      }
+      if (-not $st) { throw '10 秒内没起来' }
+      if (-not $st.config.sources.dsh) { throw '/api/state 少了 config.sources.dsh' }
+      if ($null -eq $st.dsh.workspaces) { throw '/api/state 少了工作区列表' }
+      "端口 $port，工作区 $(@($st.dsh.workspaces).Count) 个"
+    } finally {
+      Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+      Remove-Item Env:\PORT -ErrorAction SilentlyContinue
+    }
+  }
+
   # ── 8. 备份冒烟：dsh ──
   Test-Check '备份冒烟 dsh' {
     if (-not $dshFile) { return 'SKIP: 没有样本' }
@@ -187,7 +259,8 @@ try {
       ('黄' + '同学'),
       ('芙' + '莉莲'),
       ('be8b' + 'd838'),
-      ('deepseek' + '-harness')
+      # 只认路径那种写法；插件包里的 npm 关键词 deepseek-harness 是正常的
+      ('Documents\' + 'deepseek-harness')
     )
     $hit = @()
     foreach ($rel in @(git -C $repo ls-files)) {

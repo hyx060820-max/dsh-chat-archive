@@ -8,3 +8,6 @@
 # 依赖与本地测试
 node_modules/
 _tmp/
+
+# 界面存的本地配置（里面有你的路径）
+.config.json

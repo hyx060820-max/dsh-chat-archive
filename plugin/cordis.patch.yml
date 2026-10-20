@@ -1,0 +1,5 @@
+# dsh-memory bundle 层：把「记忆体」插进设置页
+- insert:
+    - id: dsh-memory
+      name: dsh-memory
+      config: {}

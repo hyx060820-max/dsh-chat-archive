@@ -25,9 +25,34 @@ DSH 那份是多帧 zstd 拼起来的，要自己切帧解压；Codex 是纯文�
 
 ## 依赖
 
-- **Node.js ≥ 22.15**（或 23.8 以上）。用到 `zlib.zstdDecompressSync`，更老的版本没有
+- **Node.js**。DSH 的会话要 `zlib.zstdDecompressSync`，所以需要 **22.15 以上或 23.8 以上**；
+  Codex 的会话是纯文本，老一点的 node 也能读
 - **PowerShell 5.1+**，Windows 自带；Linux/macOS 用 `pwsh`
 - 一个 DSH 或 Codex CLI 的安装，有历史会话可读
+
+不知道自己的 node 够不够：
+
+```powershell
+node -e "console.log(typeof require('node:zlib').zstdDecompressSync === 'function' ? '有 zstd' : '没有 zstd')"
+```
+
+## 文件结构
+
+```
+backup-chat.ps1      调度：锁、挑会话、跑导出、校验、写记录
+export-session.mjs   命令行入口：读参数、选格式、渲染成 txt 或 md
+verify.ps1           十五项检查，提交前跑
+server.mjs           本地界面服务（零依赖）
+ui/index.html        界面本体（HTML + CSS + JS 全在一个文件里）
+sources/
+├─ index.mjs         格式登记处 + 自动识别
+├─ dsh.mjs           多帧 zstd 解帧 + 事件映射
+└─ codex.mjs         JSONL 逐行读 + 噪音过滤
+.githooks/pre-push   推之前自动跑 verify.ps1
+```
+
+脚本不认识格式细节，格式细节也不知道怎么排版。中间那层只有四个字段：
+`role`（`user` / `assistant` / `tool`）、`time`、`body`、`images`。
 
 ## 用起来
 
@@ -50,6 +75,59 @@ cd dsh-chat-archive
 
 会话 ID 就是 `~/.dsh/sessions/<工作区>/` 下的目录名。
 Codex 那边一场对话一个 `rollout-*.jsonl`，不加 `-SessionId` 会把这两天动过的全收进来。
+
+## 界面
+
+不想记参数就开界面：
+
+```powershell
+node server.mjs
+```
+
+浏览器打开 <http://127.0.0.1:7788>。零依赖，不用装任何东西。
+
+三块内容：
+
+| 位置 | 管什么 |
+|---|---|
+| **来源开关** | DSH、Codex 各一个。关掉的那个一次都不跑，连目录都不读 |
+| **工作区** | 勾哪些就只备份哪些。不勾「全部」时，选中的集合会传给 `-Workspace` |
+| **输出** | 存档放哪儿、文本里怎么称呼双方 |
+
+DSH 的工作区目录名是编码过的路径（`--C-Users-~9EC4~540C~5B66-.dsh-im--`），
+界面会去会话第一帧里读真实 `cwd`，显示成 `C:\Users\...\.dsh\im` 这种样子。
+
+点「立即备份」会先把当前设置存下来，再跑，跑完把这份记录贴出来。
+
+配置存在仓库根目录的 `.config.json`，已进 `.gitignore`。删掉就回到默认。
+
+服务只监听 `127.0.0.1`，没有登录，也没打算对外开。换端口：
+
+```powershell
+$env:PORT=9000; node server.mjs
+```
+
+用完 `Ctrl+C`。它不常驻，也不自动跑；要每天自动，还是用下面的计划任务。
+
+## DSH 插件：记忆体
+
+`plugin/` 是一个 DSH 插件，名字叫**记忆体**。装上之后，「设置 → 记忆体」里就有同样的
+开关和按钮，不用另开网页。
+
+```powershell
+.\plugin\install.ps1
+```
+
+重启 DSH 生效。撤销：
+
+```powershell
+.\plugin\install.ps1 -Uninstall
+```
+
+装的时候会先备份 profile 的 `package.json`，改的只有一条依赖和一条 bundle。
+
+插件**不含**备份逻辑——它调用本仓库的 `backup-chat.ps1`。所以插件里的「脚本目录」
+要指向这份仓库。不重复实现是有意的：两套备份逻辑迟早会走岔。
 
 ## 每天自动跑
 
@@ -111,6 +189,8 @@ Codex 来源的原始文件叫 `原始\codex\<rollout 名>.jsonl`，会话 ID �
 | `-Pattern` | 按格式取 | 会话文件名通配 |
 | `-Root` | `~/dsh-memory` | 输出根目录 |
 | `-SessionId` | 空 | 只备份这个会话；空 = 最近改动的那个 |
+| `-Workspace` | 空 | 只备份这几个工作区（数组）。空 = 全都要 |
+| `-WorkspaceList` | 空 | 同上，逗号串写法，给界面这类调用方用 |
 | `-Exporter` | 同目录的 `export-session.mjs` | 导出器路径 |
 | `-AssistantName` | `助理` | 文本里助手的显示名 |
 | `-UserName` | `你` | 文本里用户的显示名 |
@@ -175,6 +255,27 @@ git config core.hooksPath .githooks
 
 没装 Codex 或没装 DSH 的机器，对应那几项显示跳过，不影响其余。
 
+## 这些约定只在当前工作区生效
+
+上面那套「改动 → 验证 → 推送」，连同 `.githooks/` 和 `AGENTS.md`，**只在这一个工作区里管事**。
+别处不自动继承。
+
+| 机制 | 存在哪 | 换个地方会怎样 |
+|---|---|---|
+| `AGENTS.md` | 仓库根目录的文件 | 换个工作目录干活，没人读它 |
+| `core.hooksPath` | `.git/config`，本地配置 | 新克隆要重新 `git config` 一次 |
+| `verify.ps1` 的真机检查 | 依赖本机 `~/.dsh`、`~/.codex` | 没有对应会话的机器上会跳过 |
+
+换一台机器，三步：
+
+```powershell
+git clone https://github.com/hyx060820-max/dsh-chat-archive.git
+cd dsh-chat-archive
+git config core.hooksPath .githooks
+```
+
+`verify.ps1` 本身随仓库走，不用另装。
+
 ## 恢复
 
 先**完全退出 DSH**，否则会话文件可能被写回。
@@ -212,6 +313,18 @@ Get-ChildItem $Root -Directory |
 粗算一年 2–4 GB。永不删除，这个数只往上走。
 
 嫌大了，可以改成「只存当天追加的那几帧」，代价是恢复要按顺序拼。
+
+## 出问题先看这儿
+
+| 症状 | 原因 | 怎么办 |
+|---|---|---|
+| `找不到会话文件` | 目录不对，或还没聊过 | 加 `-Sessions '真实目录'`；DSH 是 `~/.dsh/sessions` |
+| 中文全是乱码 | `.ps1` 丢了 BOM | 存成 UTF-8 with BOM。`verify.ps1` 会查 |
+| `没有 zstd 解压` | node 太老 | 装 22.15+ 或 23.8+；或者先只备份 Codex |
+| 退出码 1，`备份记录.md` 有「需要注意」 | 有一条没备成 | 看那一节，原文件都还在，没被覆盖 |
+| 条数变少，拒绝覆盖 | 会话文件读得不全 | 先别删旧的；把 `聊天\` 里那天的文件留着，查完再手动重跑 |
+| push 被取消 | 验证没过 | 看终端输出，修完再推。想临时绕过：`git push --no-verify`（不建议） |
+| 备份记录里天天「没有消息，跳过」 | 昨天确实没聊 | 正常，不是错误 |
 
 ## 已知限制
 
