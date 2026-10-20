@@ -209,6 +209,8 @@ window.__ModuleLoader__.load({
 			};
 
 			const sd = s.sources.dsh;
+			// 只有「会被备份」的工作区才值得填分组：勾了「全部」就是全部，否则只看勾中的
+			const picked = ws.filter((w) => sd.all || sd.workspaces.indexOf(w.name) >= 0);
 			const ws = (st.dsh && st.dsh.workspaces) || [];
 			const total = ws.reduce((a, b) => a + b.sessions, 0);
 
@@ -492,15 +494,15 @@ window.__ModuleLoader__.load({
 								h(
 									"div",
 									{ className: "dsh-mem-hint" },
-									"分组可以不填，不填就用工作区自己的名字。",
+									picked.length ? "分组可以不填，不填就用工作区自己的名字。" : "还没勾选工作区——上面那张卡里选一个。",
 								),
-								ws.map((w) =>
+								picked.map((w) =>
 									h(
 										"label",
 										{ className: "dsh-mem-grp", key: "grp-" + w.name },
 										h("span", { className: "n" }, w.label || w.name),
 										h("input", {
-											placeholder: "分组（可空）",
+											placeholder: "分组",
 											value: (s.groups && s.groups[w.name]) || "",
 											onChange: (e) => mutate((n2) => { n2.groups = Object.assign({}, n2.groups, { [w.name]: e.target.value }); }),
 										}),
