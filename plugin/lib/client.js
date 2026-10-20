@@ -209,10 +209,10 @@ window.__ModuleLoader__.load({
 			};
 
 			const sd = s.sources.dsh;
-			// 只有「会被备份」的工作区才值得填分组：勾了「全部」就是全部，否则只看勾中的
-			const picked = ws.filter((w) => sd.all || sd.workspaces.indexOf(w.name) >= 0);
 			const ws = (st.dsh && st.dsh.workspaces) || [];
 			const total = ws.reduce((a, b) => a + b.sessions, 0);
+			// 只有「会被备份」的工作区才值得填分组：勾了「全部」就是全部，否则只看勾中的
+			const picked = ws.filter((w) => sd.all || sd.workspaces.indexOf(w.name) >= 0);
 
 			return h(
 				"div",

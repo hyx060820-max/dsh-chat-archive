@@ -1,6 +1,6 @@
 {
   "name": "dsh-memory",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "private": true,
   "description": "记忆体：把 DSH / Codex / WorkBuddy 的会话按天归档，并在设置里管理「关于我」",
   "keywords": ["dsh", "dsh-plugin", "deepseek-harness", "chat-archive", "memory"],
