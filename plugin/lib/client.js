@@ -106,6 +106,8 @@ window.__ModuleLoader__.load({
 			const [hint, setHint] = react.useState("");
 			const [busy, setBusy] = react.useState(false);
 			const [startupMsg, setStartupMsg] = react.useState("");
+			const [checkMsg, setCheckMsg] = react.useState("");
+			const [feedText, setFeedText] = react.useState("");
 			const [result, setResult] = react.useState(null);
 
 			const load = () =>
@@ -144,8 +146,6 @@ window.__ModuleLoader__.load({
 				}
 			};
 
-			const [checkMsg, setCheckMsg] = react.useState("");
-			const [feedText, setFeedText] = react.useState("");
 
 			const checkUpdate = async () => {
 				setCheckMsg("查着…");

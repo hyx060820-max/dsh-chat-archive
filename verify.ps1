@@ -224,6 +224,24 @@ try {
     "$($js.Count) 个文件通过，根包也能装"
   }
 
+  # ── 7c2b. 设置面板的 hooks 顺序 ──
+  Test-Check '面板钩子顺序' {
+    $c = Get-Content (Join-Path $repo 'plugin/lib/client.js') -Raw -Encoding UTF8
+    # 只看 MemoryPanel 那段（ReadButton 是另一个组件，它的钩子在后面是正常的）
+    $from = $c.IndexOf('function MemoryPanel')
+    $to = $c.IndexOf('function useBtnShow')
+    if ($from -lt 0 -or $to -lt 0 -or $to -le $from) { throw '面板边界找不到，检查逻辑要改' }
+    $panel = $c.Substring($from, $to - $from)
+    $guard = $panel.IndexOf('if (!st) return')
+    if ($guard -lt 0) { throw '没找到面板的提前返回，检查逻辑要改' }
+    $lastHook = $panel.LastIndexOf('react.useState')
+    if ($lastHook -gt $guard) {
+      $line = ($panel.Substring(0, $lastHook) -split "`n").Count
+      throw "第 $line 行有 useState 在提前返回之后。React 的钩子规则一破，整个面板会变空白"
+    }
+    '钩子都在提前返回之前'
+  }
+
   # ── 7c3. 技能版 ──
   Test-Check '记忆体 CLI' {
     & node (Join-Path $repo 'tools/memory.mjs') 2>&1 | Out-Null
