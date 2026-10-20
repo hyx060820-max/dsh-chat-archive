@@ -32,6 +32,8 @@ const DEFAULTS = {
   schedule: { enabled: false, at: '23:00', lastRun: null },
   // 往各工作区的 AGENTS.md 里写一块「开头读关于我」
   startup: { enabled: false, lastRun: null },
+  // 输入框右边那个「读关于我」按钮，显示还是藏着
+  button: { show: true },
 };
 
 const expand = (p) => (p && p.startsWith('~') ? join(homedir(), p.slice(1)) : p);
@@ -51,6 +53,7 @@ function readSettings() {
     },
     schedule: { ...DEFAULTS.schedule, ...(saved.schedule ?? {}) },
     startup: { ...DEFAULTS.startup, ...(saved.startup ?? {}) },
+    button: { ...DEFAULTS.button, ...(saved.button ?? {}) },
   };
 }
 
@@ -386,6 +389,7 @@ function apply(ctx) {
       },
       schedule: { ...cur.schedule, ...(patch.settings?.schedule ?? {}) },
       startup: { ...cur.startup, ...(patch.settings?.startup ?? {}) },
+      button: { ...cur.button, ...(patch.settings?.button ?? {}) },
     };
     if (!/^([01]?\d|2[0-3]):[0-5]\d$/.test(String(next.schedule.at ?? ''))) {
       return sendJson(res, 400, { ok: false, error: `时间要写成 HH:mm，收到：${next.schedule.at}` });

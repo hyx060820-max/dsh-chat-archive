@@ -93,6 +93,7 @@ window.__ModuleLoader__.load({
 				getJson("/state")
 					.then((d) => {
 						setSt(d);
+						setBtnShow(d.settings?.button?.show);
 						setErr("");
 					})
 					.catch((e) => setErr(String(e.message || e)));
@@ -234,6 +235,35 @@ window.__ModuleLoader__.load({
 										h("span", { className: "t" }, w.sessions + " 个会话 · " + rel(w.last)),
 									);
 								}),
+					),
+				),
+				// 输入框按钮的显隐
+				h(
+					"div",
+					{ className: "dsh-mem-card" + (s.button.show ? "" : " off") },
+					h(
+						"div",
+						{ className: "dsh-mem-row" },
+						h(
+							"div",
+							{ className: "dsh-mem-grow" },
+							h("div", { className: "dsh-mem-name" }, "输入框里显示「读关于我」"),
+							h(
+								"div",
+								{ className: "dsh-mem-meta" },
+								s.button.show ? "输入框右边有这个按钮" : "藏起来，输入框右边只剩模型选择",
+							),
+						),
+						h(Switch, {
+							checked: !!s.button.show,
+							title: "显示/隐藏输入框按钮",
+							onChange: (v) => { mutate((n) => { n.button.show = v; }); setBtnShow(v); },
+						}),
+					),
+					h(
+						"div",
+						{ className: "dsh-mem-hint", style: { marginTop: 8 } },
+						"只是藏起来，功能还在。想用的时候打开，点一下、回车。",
 					),
 				),
 				// 关于我
@@ -444,7 +474,26 @@ window.__ModuleLoader__.load({
 			return true;
 		}
 
+		// 输入框那个按钮的显示状态：设置里改了，按钮当场跟着变，不用重启
+		const btnShow = { value: true, subs: new Set() };
+		const setBtnShow = (v) => {
+			const next = v !== false;
+			if (btnShow.value === next) return;
+			btnShow.value = next;
+			for (const f of btnShow.subs) f();
+		};
+		function useBtnShow() {
+			const [, bump] = react.useState(0);
+			react.useEffect(() => {
+				const f = () => bump((n) => n + 1);
+				btnShow.subs.add(f);
+				return () => btnShow.subs.delete(f);
+			}, []);
+			return btnShow.value;
+		}
+
 		function ReadButton() {
+			const show = useBtnShow();
 			const [done, setDone] = react.useState(false);
 			const [failed, setFailed] = react.useState(false);
 			const click = () => {
@@ -456,6 +505,7 @@ window.__ModuleLoader__.load({
 					setFailed(false);
 				}, 1800);
 			};
+			if (!show) return null;
 			const label = failed ? "没找到输入框" : done ? "已填入，回车" : "读关于我";
 			return h("button", { className: "dsh-mem-fill" + (done ? " done" : ""), onClick: click, title: "点一下把「" + FILL_TEXT + "」填进输入框" }, label);
 		}
