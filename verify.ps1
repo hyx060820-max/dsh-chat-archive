@@ -224,6 +224,30 @@ try {
     "$($js.Count) 个文件通过，根包也能装"
   }
 
+  # ── 7c2a. 装出来的包布局要和入口对得上 ──
+  Test-Check '包布局' {
+    $tmp = Join-Path $work 'pkg'
+    New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+    Copy-Item (Join-Path $repo 'package.json') $tmp -Force
+    Copy-Item (Join-Path $repo 'plugin') (Join-Path $tmp 'plugin') -Recurse -Force
+    Copy-Item (Join-Path $repo 'backup-chat.ps1') $tmp -Force
+
+    $rp = Get-Content (Join-Path $tmp 'package.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+    $main = $rp.main -replace '^\./', ''
+    if (-not (Test-Path (Join-Path $tmp $main))) {
+      throw "根 package.json 的 main 是 $($rp.main)，但这个路径在包布局里不存在"
+    }
+    $client = $rp.exports.'./client'.default -replace '^\./', ''
+    if (-not (Test-Path (Join-Path $tmp $client))) {
+      throw "exports 的 ./client 指向 $($rp.exports.'./client'.default)，文件不存在"
+    }
+    $patch = $rp.dsh.bundle.patch -replace '^\./', ''
+    if (-not (Test-Path (Join-Path $tmp $patch))) {
+      throw "bundle.patch 指向 $($rp.dsh.bundle.patch)，文件不存在"
+    }
+    'main / client / patch 都对得上'
+  }
+
   # ── 7c2b. 设置面板的 hooks 顺序 ──
   Test-Check '面板钩子顺序' {
     $c = Get-Content (Join-Path $repo 'plugin/lib/client.js') -Raw -Encoding UTF8
