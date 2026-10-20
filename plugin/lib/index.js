@@ -1,9 +1,10 @@
 // 记忆体 · Host 半
 //
-// 在 DSH 的 webServer 上开三个路由（都过「回环 + 同源」闸）：
+// 在 DSH 的 webServer 上开四个路由（都过「回环 + 同源」闸）：
 //   GET  /dsh-memory/state     设置 + 扫出来的工作区 + 最近一份记录
 //   POST /dsh-memory/settings  部分写入
 //   POST /dsh-memory/run       按启用的来源跑备份
+//   POST /dsh-memory/startup   往勾选工作区的 AGENTS.md 写/撤档案块
 //
 // 真正的备份逻辑在仓库里（backup-chat.ps1 + export-session.mjs）。
 // 这个插件只负责：界面、存设置、把参数拼好、把脚本叫起来。
