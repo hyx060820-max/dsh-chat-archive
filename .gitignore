@@ -11,3 +11,14 @@ _tmp/
 
 # 界面存的本地配置（里面有你的路径）
 .config.json
+
+# 私人文件：曾经被 git add -A 扫进来过（简历、文档、截图、脚本）
+*简历*
+src_web.doc
+*.doc
+*.docx
+shot*.png
+build_resume.py
+check_resume.py
+dump_docx.py
+*.bak

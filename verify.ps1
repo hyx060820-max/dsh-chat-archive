@@ -224,6 +224,18 @@ try {
     "$($js.Count) 个文件通过，根包也能装"
   }
 
+  # ── 7c1b. 仓库里不能有私人文件 ──
+  Test-Check '没有私人文件' {
+    Push-Location $repo
+    try {
+      $tracked = git ls-files
+    } finally { Pop-Location }
+    # 简历、文档、截图、备份文件——这些曾经被 git add -A 扫进来过
+    $bad = @($tracked | Where-Object { $_ -match '简历|src_web|shot\d*\.png|_resume|dump_docx|\.bak$|\.docx?$' })
+    if ($bad.Count -gt 0) { throw ('这些不该被跟踪：' + ($bad -join ', ')) }
+    "$($tracked.Count) 个文件，没有私人的"
+  }
+
   # ── 7c2a. 装出来的包布局要和入口对得上 ──
   Test-Check '包布局' {
     $tmp = Join-Path $work 'pkg'
