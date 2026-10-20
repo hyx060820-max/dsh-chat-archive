@@ -110,12 +110,7 @@ window.__ModuleLoader__.load({
 					.catch((e) => setErr(String(e.message || e)));
 
 			react.useEffect(() => {
-				const style = document.createElement("style");
-				style.dataset.plugin = "dsh-memory";
-				style.textContent = STYLES;
-				document.head.appendChild(style);
 				load();
-				return () => style.remove();
 			}, []);
 
 			if (err) return h("div", { className: "dsh-mem-root" }, h("div", { className: "dsh-mem-hint" }, "连不上插件服务：" + err));
@@ -549,6 +544,16 @@ window.__ModuleLoader__.load({
 		const inject = ["slots"];
 
 		function apply(ctx) {
+			// 样式在插件加载时就挂上，不等谁去打开设置页。
+			// 之前放在设置面板的 effect 里，没见过设置页的人就看不到样式。
+			ctx.effect(() => {
+				const style = document.createElement("style");
+				style.dataset.plugin = "dsh-memory";
+				style.textContent = STYLES;
+				document.head.appendChild(style);
+				return () => style.remove();
+			});
+
 			ctx.slots.inject("conversation.input.right", () =>
 				ctx.slots.register(
 					{ name: "conversation.input.right", id: "dsh-memory-fill", order: 200, label: () => "读关于我" },
