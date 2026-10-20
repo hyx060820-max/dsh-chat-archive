@@ -287,7 +287,7 @@ window.__ModuleLoader__.load({
 					h(
 						"div",
 						{ className: "dsh-mem-hint", style: { marginTop: 8 } },
-						"上下文一长，AI 可能忘了前面读到的。开着更稳：每个会话开头都会重新读一遍档案。",
+						"把档案原文写进各工作区的 AGENTS.md。新会话第一轮就在上下文里，不用它自己去读。DSH 启动时自动同步。",
 					),
 					h(
 						"div",

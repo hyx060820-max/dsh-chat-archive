@@ -195,17 +195,25 @@ const MARK_START = '<!-- dsh-memory:start -->';
 const MARK_END = '<!-- dsh-memory:end -->';
 const MARK_RE = new RegExp(MARK_START + '[\\s\\S]*?' + MARK_END);
 
+// 不是「叫它去读」，是把档案原文嵌进 AGENTS.md。
+// AGENTS.md 是第一轮就注入的基线，不是一次工具调用——它躲不掉。
 function startupBlock(s) {
   const me = join(expand(s.root), '关于我.md');
+  let body = '';
+  try {
+    body = existsSync(me) ? readFileSync(me, 'utf8').trim() : '';
+  } catch {
+    body = '';
+  }
   return [
     MARK_START,
-    '## 记忆',
+    '## 记忆（由「记忆体」自动写入，改这里会被覆盖）',
     '',
-    `用户档案在 \`${me}\`。`,
+    body || `用户档案在 \`${me}\`。每个会话开头先读一遍。`,
     '',
-    '- **每个会话开头先读一遍。** 读完不要复述，直接用。',
-    '- 档案里没写的事，不要编。不确定就问一句。',
-    '- 聊到会反复用到的新事实，追加进那份档案，并说一声改了什么。',
+    '---',
+    '',
+    `> 要改内容就改 \`${me}\`，或对助手说一句。下次 DSH 启动会重新同步这里。`,
     MARK_END,
   ].join('\n');
 }
@@ -466,6 +474,20 @@ function apply(ctx) {
   ctx.effect(() => () => {
     for (const d of disposers) d();
   });
+
+  // DSH 启动时同步一次：档案改过了，各工作区的 AGENTS.md 跟着更新。
+  // 不是「叫它去读」——是把内容写进基线里，新会话第一轮就看得到。
+  setTimeout(() => {
+    try {
+      const s = readSettings();
+      if (!s.startup?.enabled) return;
+      const results = applyStartup(s, true);
+      const changed = results.filter((r) => r.changed).length;
+      if (changed > 0) console.log(`[dsh-memory] 同步了 ${changed} 个工作区的 AGENTS.md`);
+    } catch {
+      /* 启动时出错不要拖累主进程 */
+    }
+  }, 3000);
 }
 
 export { apply, inject, name };
