@@ -46,6 +46,17 @@ const expand = (p) => (p && p.startsWith('~') ? join(homedir(), p.slice(1)) : p)
 const PKG_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..');
 const hasScript = (dir) => !!dir && existsSync(join(dir, 'backup-chat.ps1'));
 
+// 仓库地址：更新检查和留言反馈都指向这里
+const REPO_URL = 'https://github.com/hyx060820-max/dsh-chat-archive';
+
+function currentVersion() {
+  try {
+    return JSON.parse(readFileSync(join(PKG_ROOT, 'package.json'), 'utf8')).version ?? '0.0.0';
+  } catch {
+    return '0.0.0';
+  }
+}
+
 // 决定用哪份脚本：设置里填了且有效 → 用它；否则用包里自带的。都没有就返回设置里那个值，好让报错说清
 const repoRoot = (s) => {
   const configured = expand(String(s?.repo ?? '').trim());
@@ -367,6 +378,8 @@ function statePayload(s) {
     settings: s,
     paths: { root: expand(s.root), repo: repoRoot(s), pkgRoot: PKG_ROOT },
     node: process.version,
+    version: currentVersion(),
+    repoUrl: REPO_URL,
     me: meInfo(s),
     startup: startupStatus(s),
     dsh: scanDsh(join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'sessions')),
@@ -393,6 +406,45 @@ function apply(ctx) {
   };
 
   on('/dsh-memory/state', (req, res) => sendJson(res, 200, statePayload(readSettings())));
+
+  // 检查更新：问 GitHub 的 tags。没网就诚实说没查到，不假装是最新
+  on('/dsh-memory/update', async (req, res) => {
+    const current = currentVersion();
+    try {
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), 8000);
+      const url = `${REPO_URL.replace('https://github.com/', 'https://api.github.com/repos/')}/tags?per_page=30`;
+      const r = await fetch(url, {
+        signal: ctl.signal,
+        headers: { accept: 'application/vnd.github+json', 'user-agent': 'dsh-memory' },
+      });
+      clearTimeout(timer);
+      if (!r.ok) throw new Error(`GitHub 返回 ${r.status}`);
+      const tags = await r.json();
+      const cmp = (a, b) => {
+        const pa = a.split('.').map(Number);
+        const pb = b.split('.').map(Number);
+        for (let i = 0; i < 3; i += 1) if (pa[i] !== pb[i]) return pb[i] - pa[i];
+        return 0;
+      };
+      const versions = (Array.isArray(tags) ? tags : [])
+        .map((t) => String(t?.name ?? '').replace(/^v/, ''))
+        .filter((v) => /^\d+\.\d+\.\d+$/.test(v))
+        .sort(cmp);
+      const latest = versions[0] ?? current;
+      const upToDate = latest === current;
+      sendJson(res, 200, {
+        ok: true,
+        current,
+        latest,
+        upToDate,
+        releaseUrl: `${REPO_URL}/releases/tag/v${latest}`,
+      });
+    } catch (e) {
+      sendJson(res, 200, { ok: false, current, error: String(e?.message ?? e) });
+    }
+  });
+
 
   on('/dsh-memory/settings', async (req, res) => {
     if (req.method !== 'POST') return sendJson(res, 200, { ok: true, settings: readSettings() });

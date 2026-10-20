@@ -35,6 +35,14 @@ window.__ModuleLoader__.load({
 .dsh-mem-field span { display: block; font-size: 12px; opacity: .7; margin-bottom: 5px; }
 .dsh-mem-field input { width: 100%; box-sizing: border-box; padding: 7px 9px; border-radius: 7px; background: rgba(127,127,127,.07); border: 1px solid rgba(127,127,127,.35); color: inherit; font: inherit; font-size: 13px; }
 .dsh-mem-field input:focus { outline: none; border-color: #c8763f; }
+.dsh-mem-field textarea {
+  width: 100%; box-sizing: border-box; padding: 8px 10px; border-radius: 7px;
+  background: rgba(127,127,127,.07); border: 1px solid rgba(127,127,127,.35);
+  color: inherit; font: inherit; font-size: 13px; resize: vertical; min-height: 62px;
+}
+.dsh-mem-field textarea:focus { outline: none; border-color: #c8763f; }
+.dsh-mem-link { color: inherit; opacity: .7; font-size: 12px; }
+.dsh-mem-link:hover { opacity: 1; }
 .dsh-mem-bar { display: flex; align-items: center; gap: 10px; }
 .dsh-mem-btn { font: inherit; font-size: 13px; padding: 7px 15px; border-radius: 7px; border: 1px solid rgba(127,127,127,.4); background: rgba(127,127,127,.09); color: inherit; cursor: pointer; }
 .dsh-mem-btn.primary { background: #c8763f; border-color: #c8763f; color: #1a1206; font-weight: 600; }
@@ -134,6 +142,36 @@ window.__ModuleLoader__.load({
 					setHint("保存失败：" + (e.message || e));
 					return false;
 				}
+			};
+
+			const [checkMsg, setCheckMsg] = react.useState("");
+			const [feedText, setFeedText] = react.useState("");
+
+			const checkUpdate = async () => {
+				setCheckMsg("查着…");
+				try {
+					const d = await getJson("/update");
+					if (!d.ok) return setCheckMsg("查不到：" + (d.error || "未知原因"));
+					setCheckMsg(d.latest === d.current ? "已是最新" : "有新版本 v" + d.latest + "（当前 v" + d.current + "）");
+				} catch (e) {
+					setCheckMsg("查不到：" + (e.message || e));
+				}
+			};
+
+			const sendFeedback = () => {
+				const text = feedText.trim();
+				if (!text) return;
+				const body = [
+					"## 想说的",
+					text,
+					"",
+					"## 环境",
+					"- 插件版本：" + (st.version || "?"),
+					"- Node：" + (st.node || "?"),
+					"- 系统：" + (navigator.platform || "?"),
+				].join("\n");
+				const url = (st.repoUrl || "") + "/issues/new?title=" + encodeURIComponent("反馈：" + text.slice(0, 40)) + "&body=" + encodeURIComponent(body);
+				window.open(url, "_blank", "noopener");
 			};
 
 			const run = async () => {
@@ -411,6 +449,43 @@ window.__ModuleLoader__.load({
 							h("span", null, "用户显示名"),
 							h("input", { value: s.userName, onChange: (e) => mutate((n) => { n.userName = e.target.value; }) }),
 						),
+					),
+				),
+				// 版本与反馈
+				h(
+					"div",
+					{ className: "dsh-mem-card" },
+					h(
+						"div",
+						{ className: "dsh-mem-row" },
+						h(
+							"div",
+							{ className: "dsh-mem-grow" },
+							h("div", { className: "dsh-mem-name" }, "版本与反馈"),
+							h(
+								"div",
+								{ className: "dsh-mem-meta" },
+								"当前 v" + (st.version || "?") + (checkMsg ? " · " + checkMsg : ""),
+							),
+						),
+						h("button", { className: "dsh-mem-btn", onClick: checkUpdate }, "检查更新"),
+					),
+					h(
+						"label",
+						{ className: "dsh-mem-field" },
+						h("span", null, "留言（点提交会在 GitHub 开一个 issue）"),
+						h("textarea", {
+							rows: 3,
+							value: feedText,
+							placeholder: "哪里不好用、想要什么",
+							onChange: (e) => setFeedText(e.target.value),
+						}),
+					),
+					h(
+						"div",
+						{ className: "dsh-mem-bar", style: { marginTop: 10 } },
+						h("button", { className: "dsh-mem-btn", disabled: !feedText.trim(), onClick: sendFeedback }, "在 GitHub 上提交"),
+						h("a", { className: "dsh-mem-link", href: st.repoUrl || "#", target: "_blank", rel: "noopener" }, "项目地址"),
 					),
 				),
 				// 动作
