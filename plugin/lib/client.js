@@ -320,7 +320,7 @@ window.__ModuleLoader__.load({
 					h(
 						"div",
 						{ className: "dsh-mem-hint", style: { marginTop: 8 } },
-						"把档案原文写进各工作区的 AGENTS.md。新会话第一轮就在上下文里，不用它自己去读。DSH 启动时自动同步。",
+						"只对「新开」的对话有用：把档案原文写进 AGENTS.md，新对话第一轮就带着它。已经在聊的那个不吃这套——掉细节时点输入框旁边的按钮。",
 					),
 					h(
 						"div",
