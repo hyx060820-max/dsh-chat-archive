@@ -1,0 +1,25 @@
+#!/bin/sh
+# 推之前先验证。verify.ps1 不过，push 就取消。
+here=$(dirname "$0")
+root=$(cd "$here/.." && pwd)
+
+echo ""
+echo "== pre-push：先验证 =="
+
+if command -v pwsh >/dev/null 2>&1; then
+  pwsh -NoProfile -File "$root/verify.ps1"
+elif command -v powershell >/dev/null 2>&1; then
+  powershell -NoProfile -ExecutionPolicy Bypass -File "$root/verify.ps1"
+else
+  echo "找不到 PowerShell，跳过验证。" >&2
+  exit 0
+fi
+
+if [ $? -ne 0 ]; then
+  echo ""
+  echo "验证没通过，push 已取消。" >&2
+  exit 1
+fi
+
+echo "== 验证通过，继续 push =="
+exit 0
