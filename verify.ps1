@@ -206,10 +206,22 @@ try {
       if ($LASTEXITCODE -ne 0) { throw "$($f.Name) 语法错误" }
     }
     $pkg = Get-Content (Join-Path $dir 'package.json') -Raw -Encoding UTF8 | ConvertFrom-Json
-    if (-not $pkg.dsh.client) { throw 'package.json 缺 dsh.client' }
-    if (-not $pkg.dsh.bundle) { throw 'package.json 缺 dsh.bundle' }
-    if (-not (Test-Path (Join-Path $dir 'cordis.patch.yml'))) { throw '缺 cordis.patch.yml' }
-    "$($js.Count) 个文件通过"
+    if (-not $pkg.dsh.client) { throw 'plugin/package.json 缺 dsh.client' }
+    if (-not $pkg.dsh.bundle) { throw 'plugin/package.json 缺 dsh.bundle' }
+    if (-not (Test-Path (Join-Path $dir 'cordis.patch.yml'))) { throw '缺 plugin/cordis.patch.yml' }
+
+    # 根目录也得是能装的插件包，否则在 DSH 的插件页里填仓库地址会报
+    # 「这个包没有声明组合包」
+    $rootPkg = Join-Path $repo 'package.json'
+    if (-not (Test-Path $rootPkg)) { throw '根目录缺 package.json（插件页按仓库装会失败）' }
+    $rp = Get-Content $rootPkg -Raw -Encoding UTF8 | ConvertFrom-Json
+    if (-not $rp.dsh.bundle) { throw '根 package.json 缺 dsh.bundle' }
+    if (-not $rp.dsh.client) { throw '根 package.json 缺 dsh.client' }
+    if ($rp.name -ne 'dsh-memory') { throw "根 package.json 的 name 是 $($rp.name)，必须是 dsh-memory（要和 cordis 里的名字对上）" }
+    $patch = Join-Path $repo ($rp.dsh.bundle.patch -replace '^\./', '')
+    if (-not (Test-Path $patch)) { throw "根 package.json 指向的 patch 不存在：$($rp.dsh.bundle.patch)" }
+
+    "$($js.Count) 个文件通过，根包也能装"
   }
 
   # ── 7c3. 技能版 ──

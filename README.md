@@ -172,6 +172,9 @@ $env:PORT=9000; node server.mjs
 .\plugin\install.ps1
 ```
 
+或者直接在 DSH 的「插件」页里填这个仓库地址装——根目录的 `package.json` 已经声明了组合包，
+能直接认。
+ 
 重启 DSH 生效。撤销：
 
 ```powershell
