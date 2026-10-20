@@ -1,9 +1,19 @@
 # dsh-chat-archive
 
-把 DSH（DeepSeek Harness）的会话按天存档成**人读得懂的文件**。
+把 AI agent 的会话按天存档成**人读得懂的文件**。
 
-会话原文是一串 zstd 压缩的 JSONL 帧，翻不动，也不好搜。这个工具每天跑一次，
+会话原文要么是二进制，要么是一大坨 JSONL，翻不动，也不好搜。这个工具每天跑一次，
 把它摊平成纯文本、完整 markdown、和可原样恢复的原始快照。**永不自动删除。**
+
+支持两种来源：
+
+| 格式 | agent | 会话在哪 |
+|---|---|---|
+| `dsh` | DSH（DeepSeek Harness） | `~/.dsh/sessions/<工作区>/<会话ID>/session.v4.jsonl.zstd` |
+| `codex` | Codex CLI | `~/.codex/sessions/<年>/<月>/<日>/rollout-*.jsonl` |
+
+DSH 那份是多帧 zstd 拼起来的，要自己切帧解压；Codex 是纯文本 JSONL。
+差别都关在 `sources/` 里，导出和备份的逻辑不分叉。
 
 ## 它解决什么
 
@@ -17,7 +27,7 @@
 
 - **Node.js ≥ 22.15**（或 23.8 以上）。用到 `zlib.zstdDecompressSync`，更老的版本没有
 - **PowerShell 5.1+**，Windows 自带；Linux/macOS 用 `pwsh`
-- 一个 DSH 安装，会话文件在 `~/.dsh/sessions/<工作区>/<会话ID>/session.v4.jsonl.zstd`
+- 一个 DSH 或 Codex CLI 的安装，有历史会话可读
 
 ## 用起来
 
@@ -33,9 +43,13 @@ cd dsh-chat-archive
 
 # 只备份某一个会话（留空 = 最近有改动的那个）
 .\backup-chat.ps1 -SessionId 'session-00000000-0000-4000-8000-000000000000'
+
+# 备份 Codex CLI 的
+.\backup-chat.ps1 -Format codex
 ```
 
 会话 ID 就是 `~/.dsh/sessions/<工作区>/` 下的目录名。
+Codex 那边一场对话一个 `rollout-*.jsonl`，不加 `-SessionId` 会把这两天动过的全收进来。
 
 ## 每天自动跑
 
@@ -61,6 +75,9 @@ Register-ScheduledTask -TaskName 'DshChatArchive' -Action $a -Trigger $t
 ├─ 完整\<工作区>__<会话ID>.md          带工具调用，追查用
 └─ 备份记录.md                        备了什么、有没有问题
 ```
+
+Codex 来源的原始文件叫 `原始\codex\<rollout 名>.jsonl`，会话 ID 就是文件名。
+一天里聊过几场，就在同一个 `聊天\<日期>.txt` 里按时间并排放，每场一个表头。
 
 聊天长这样：
 
@@ -89,7 +106,9 @@ Register-ScheduledTask -TaskName 'DshChatArchive' -Action $a -Trigger $t
 
 | 参数 | 默认 | 说明 |
 |---|---|---|
-| `-Sessions` | `~/.dsh/sessions` | DSH 会话目录 |
+| `-Format` | `dsh` | 来源格式：`dsh` 或 `codex` |
+| `-Sessions` | 按格式取（见上表） | 会话目录 |
+| `-Pattern` | 按格式取 | 会话文件名通配 |
 | `-Root` | `~/dsh-memory` | 输出根目录 |
 | `-SessionId` | 空 | 只备份这个会话；空 = 最近改动的那个 |
 | `-Exporter` | 同目录的 `export-session.mjs` | 导出器路径 |
@@ -100,11 +119,12 @@ Register-ScheduledTask -TaskName 'DshChatArchive' -Action $a -Trigger $t
 ## 导出器单独用
 
 ```powershell
-node export-session.mjs <输入.zstd> <输出.md> [选项]
+node export-session.mjs <输入> <输出.md> [选项]
 ```
 
 | 选项 | 说明 |
 |---|---|
+| `--format <名字>` | 会话格式，默认 `auto` 靠文件头猜 |
 | `--txt` | 纯文本格式（默认 markdown） |
 | `--plain` | 去掉工具调用，代码块换成〔代码略〕 |
 | `--day YYYY-MM-DD` | 只导出这一天的消息 |
@@ -167,11 +187,37 @@ Get-ChildItem $Root -Directory |
 
 ## 已知限制
 
-- **只备份一个会话**。多开对话框的，各跑一遍，`-SessionId` 不同即可
+- **DSH 只备份一个会话**。多开对话框的，各跑一遍，`-SessionId` 不同即可
+- **Codex 一场对话一个文件**，不加 `-SessionId` 时把两天内改动过的全并进来
+- **原始快照只存当天的**。前几天的数据就在同一个会话文件里，不重复存
 - **原始快照是整份拷贝**，不是增量
 - **不含**：插件配置、凭据（`~/.dsh/.credentials.yaml`）、工作区里的文件。只备份聊天和聊天里的图
 - **`.ps1` 必须带 UTF-8 BOM**。PowerShell 5.1 会把无 BOM 的 UTF-8 当 ANSI 读，中文乱码并报语法错。改脚本时注意别丢
 - 备份出来的目录别提交进 git。`.gitignore` 已经挡了 `YYYY-MM-DD/`
+
+## 加一种格式
+
+`sources/` 里一个文件就是一种格式。导出一个对象：
+
+```js
+export const name = 'codex';             // 命令行里的 --format 值
+export const label = 'Codex CLI';
+export const patterns = ['rollout-*.jsonl'];
+export function detect(file) { … }       // 靠文件头判断是不是这种
+export function read(file) {             // 读出来交给渲染层
+  return {
+    meta: { title, id, cwd },
+    items: [{ role: 'user' | 'assistant' | 'tool', time, body, images: [] }],
+    warnings: [],
+  };
+}
+```
+
+然后在 `sources/index.mjs` 里 import 一下、加进 `adapters`。之后 `--format`
+和自动识别都带上它；`backup-chat.ps1` 只要在 `-Format` 的 `ValidateSet` 里
+补一个名字。
+
+`role` 只认三种。渲染、分天、去重、条数校验都不需要知道是谁家的 agent。
 
 ## 许可
 

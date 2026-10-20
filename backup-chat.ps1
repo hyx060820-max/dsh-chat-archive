@@ -1,7 +1,7 @@
 ﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
-  把 DSH 会话按天备份成可读文本、完整 markdown 和原始快照。
+  把 AI agent 的会话按天备份成可读文本、完整 markdown 和原始快照。
 
 .DESCRIPTION
   每次运行处理两天：
@@ -9,6 +9,10 @@
     今天 —— 刷新
 
   永不删除任何历史备份。
+
+  支持两种来源：
+    dsh    DSH（DeepSeek Harness）  ~/.dsh/sessions
+    codex  Codex CLI                ~/.codex/sessions
 
   安全措施：
     锁文件      两次运行撞上时，后来的直接退出，不会互相踩
@@ -22,13 +26,19 @@
   .\backup-chat.ps1
 
 .EXAMPLE
+  .\backup-chat.ps1 -Format codex
+
+.EXAMPLE
   .\backup-chat.ps1 -Root 'D:\archive' -SessionId 'session-00000000-0000-4000-8000-000000000000'
 #>
 [CmdletBinding()]
 param(
+  [ValidateSet('dsh', 'codex')]
+  [string]$Format = 'dsh',
   [string]$Sessions = '',
   [string]$Root = '',
   [string]$SessionId = '',
+  [string]$Pattern = '',
   [string]$Exporter = '',
   [string]$AssistantName = '助理',
   [string]$UserName = '你',
@@ -38,9 +48,13 @@ param(
 $ErrorActionPreference = 'Continue'
 try { [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false) } catch { }
 
-if (-not $Sessions) { $Sessions = Join-Path $HOME '.dsh\sessions' }
+if (-not $Sessions) {
+  $Sessions = if ($Format -eq 'codex') { Join-Path $HOME '.codex\sessions' } else { Join-Path $HOME '.dsh\sessions' }
+}
 if (-not $Root)     { $Root     = Join-Path $HOME 'dsh-memory' }
 if (-not $Exporter) { $Exporter = Join-Path $PSScriptRoot 'export-session.mjs' }
+if (-not $Pattern)  { $Pattern  = if ($Format -eq 'codex') { 'rollout-*.jsonl' } else { 'session.v4.jsonl.zstd' } }
+$RawExt = if ($Format -eq 'codex') { '.jsonl' } else { '.zstd' }
 
 $LockPath  = Join-Path $Root '.lock'
 $today     = $Now.ToString('yyyy-MM-dd')
@@ -83,35 +97,68 @@ $log = New-Object System.Collections.Generic.List[string]
 $log.Add("# $today 备份记录")
 $log.Add("")
 $log.Add("执行时间：$($Now.ToString('yyyy-MM-dd HH:mm:ss'))")
+$log.Add("来源格式：$Format")
 $log.Add("会话目录：$Sessions")
 $log.Add("输出目录：$Root")
 $log.Add("")
 
+$countPat = '^\[\d{2}:\d{2}\] '
+
 try {
-  $all = @(Get-ChildItem $Sessions -Recurse -Filter 'session.v4.jsonl.zstd' -ErrorAction SilentlyContinue)
-  $target = $null
+  $all = @(Get-ChildItem $Sessions -Recurse -File -Filter $Pattern -ErrorAction SilentlyContinue)
+
+  # ── 挑要备份的会话 ──
+  $targets = @()
   if ($SessionId) {
-    $target = $all | Where-Object { $_.FullName -match "\\$([regex]::Escape($SessionId))\\" } | Select-Object -First 1
+    $targets = @($all | Where-Object {
+        $_.Name -like "*$SessionId*" -or $_.FullName -match "\\$([regex]::Escape($SessionId))\\"
+      } | Sort-Object LastWriteTime -Descending | Select-Object -First 1)
+    if ($targets.Count -eq 0) {
+      $log.Add('注意：没找到指定的会话，改用最近有改动的那一个。')
+      $log.Add('')
+    }
   }
-  if (-not $target) {
-    $target = $all | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-    if ($SessionId) { $log.Add('注意：没找到指定的会话，改用最近有改动的那一个。'); $log.Add('') }
+  if ($targets.Count -eq 0) {
+    if ($Format -eq 'codex') {
+      # Codex 一场对话一个文件，把这两天动过的都收进来
+      $cut = $Now.Date.AddDays(-1)
+      $targets = @($all | Where-Object { $_.LastWriteTime -ge $cut } | Sort-Object LastWriteTime)
+    } else {
+      $targets = @($all | Sort-Object LastWriteTime -Descending | Select-Object -First 1)
+    }
   }
 
-  if (-not $target) {
+  if ($targets.Count -eq 0) {
     $log.Add('**没找到会话文件。**')
     $problems.Add('没找到会话文件')
   } else {
-    $base  = $Sessions.TrimEnd('\')
-    $rel   = $target.FullName.Substring($base.Length).TrimStart('\')
-    $parts = $rel -split '\\'
-    $ws    = $parts[0]
-    $sid   = $parts[1]
-
-    $log.Add("会话：$sid")
-    $log.Add('原始大小：' + [math]::Round($target.Length / 1KB) + ' KB')
+    # ── 认身份 ──
+    $items = @()
+    foreach ($t in $targets) {
+      if ($Format -eq 'codex') {
+        $ws  = 'codex'
+        $sid = [IO.Path]::GetFileNameWithoutExtension($t.Name)
+      } else {
+        $base  = $Sessions.TrimEnd('\')
+        $rel   = $t.FullName.Substring($base.Length).TrimStart('\')
+        $parts = $rel -split '\\'
+        $ws    = $parts[0]
+        $sid   = $parts[1]
+      }
+      $items += [pscustomobject]@{ File = $t; Ws = $ws; Sid = $sid }
+      $log.Add("会话：$sid  （$([math]::Round($t.Length / 1KB)) KB）")
+    }
     $log.Add('')
 
+    # ── 原始快照：今天的放当天文件夹 ──
+    $todayRaw = Join-Path (Join-Path $Root $today) '原始'
+    foreach ($it in $items) {
+      $dir = Join-Path $todayRaw $it.Ws
+      New-Item -ItemType Directory -Force -Path $dir | Out-Null
+      Copy-Item $it.File.FullName (Join-Path $dir ($it.Sid + $RawExt)) -Force
+    }
+
+    # ── 聊天 txt：两天各一份，多会话并进同一文件 ──
     foreach ($day in @($yesterday, $today)) {
       $dayDir   = Join-Path $Root $day
       $rawDest  = Join-Path $dayDir '原始'
@@ -120,57 +167,61 @@ try {
       $picDest  = Join-Path $dayDir '图片'
       New-Item -ItemType Directory -Force -Path $rawDest, $chatDest, $fullDest, $picDest | Out-Null
 
-      # 原始文件：今天的快照放当天文件夹
-      if ($day -eq $today) {
-        $rawDir = Join-Path $rawDest $ws
-        New-Item -ItemType Directory -Force -Path $rawDir | Out-Null
-        Copy-Item $target.FullName (Join-Path $rawDir "$sid.zstd") -Force
-      }
-
-      # ── 聊天 txt：临时文件 → 校验 → 替换 ──
       $chatFile = Join-Path $chatDest "$day.txt"
       $tmpFile  = "$chatFile.tmp"
       Remove-Item $tmpFile -Force -ErrorAction SilentlyContinue
 
-      $oldCount = 0
-      if (Test-Path $chatFile) {
-        $oldCount = (Select-String -Path $chatFile -Pattern '^\[\d{2}:\d{2}\] ' -Encoding UTF8 -AllMatches).Count
+      $fail = $null
+      foreach ($it in $items) {
+        $out = & node $Exporter $it.File.FullName $tmpFile --txt --day $day --append `
+                 --format $Format --attachments-dir $picDest `
+                 --assistant-name $AssistantName --user-name $UserName 2>&1
+        if ($LASTEXITCODE -ne 0) {
+          $fail = "exit $LASTEXITCODE：" + ("$out" -replace '\s+', ' ')
+          break
+        }
       }
 
-      $out = & node $Exporter $target.FullName $tmpFile --txt --day $day --append `
-               --attachments-dir $picDest --assistant-name $AssistantName --user-name $UserName 2>&1
-      $code = $LASTEXITCODE
-      $newCount = if ("$out" -match '(\d+) 条消息') { [int]$Matches[1] } else { 0 }
+      $oldCount = 0
+      if (Test-Path $chatFile) {
+        $oldCount = @(Select-String -Path $chatFile -Pattern $countPat -Encoding UTF8 -AllMatches).Count
+      }
 
-      if ($code -ne 0) {
-        $problems.Add("$day 导出失败（exit $code）：" + ("$out" -replace '\s+', ' '))
+      if ($fail) {
+        $problems.Add("$day 导出失败（$fail）")
         $log.Add("- $day：**导出失败**，原文件保留")
         Remove-Item $tmpFile -Force -ErrorAction SilentlyContinue
-      } elseif ("$out" -match '没有消息') {
-        $log.Add("- $day：这一天没有消息，跳过")
-        Remove-Item $tmpFile -Force -ErrorAction SilentlyContinue
-      } elseif (-not (Test-Path $tmpFile) -or (Get-Item $tmpFile).Length -lt 80) {
+      } elseif (-not (Test-Path $tmpFile)) {
+        $log.Add("- $day：没有消息，跳过")
+      } elseif ((Get-Item $tmpFile).Length -lt 80) {
         $problems.Add("$day 导出的文件异常小")
         $log.Add("- $day：**导出文件异常**，原文件保留")
         Remove-Item $tmpFile -Force -ErrorAction SilentlyContinue
-      } elseif ($newCount -lt $oldCount) {
-        $problems.Add("$day 条数变少（$oldCount → $newCount），拒绝覆盖")
-        $log.Add("- $day：**条数变少**（$oldCount → $newCount），拒绝覆盖")
-        Remove-Item $tmpFile -Force -ErrorAction SilentlyContinue
       } else {
-        Move-Item $tmpFile $chatFile -Force
-        $log.Add("- $day：$newCount 条消息" + $(if ($newCount -gt $oldCount) { "（+$($newCount - $oldCount)）" } else { '' }))
+        $newCount = @(Select-String -Path $tmpFile -Pattern $countPat -Encoding UTF8 -AllMatches).Count
+        if ($newCount -lt $oldCount) {
+          $problems.Add("$day 条数变少（$oldCount → $newCount），拒绝覆盖")
+          $log.Add("- $day：**条数变少**（$oldCount → $newCount），拒绝覆盖")
+          Remove-Item $tmpFile -Force -ErrorAction SilentlyContinue
+        } else {
+          Move-Item $tmpFile $chatFile -Force
+          $delta = if ($newCount -gt $oldCount) { "（+$($newCount - $oldCount)）" } else { '' }
+          $log.Add("- $day：$newCount 条消息$delta")
+        }
       }
 
       # ── 完整版（带工具调用，追查用） ──
-      $fullFile = Join-Path $fullDest ("{0}__{1}.md" -f $ws, $sid)
-      $fullTmp  = "$fullFile.tmp"
-      $out2 = & node $Exporter $target.FullName $fullTmp --day $day `
-                --assistant-name $AssistantName --user-name $UserName 2>&1
-      if ($LASTEXITCODE -eq 0 -and (Test-Path $fullTmp) -and (Get-Item $fullTmp).Length -gt 80) {
-        Move-Item $fullTmp $fullFile -Force
-      } else {
+      foreach ($it in $items) {
+        $fullFile = Join-Path $fullDest ("{0}__{1}.md" -f $it.Ws, $it.Sid)
+        $fullTmp  = "$fullFile.tmp"
         Remove-Item $fullTmp -Force -ErrorAction SilentlyContinue
+        $out2 = & node $Exporter $it.File.FullName $fullTmp --day $day `
+                  --format $Format --assistant-name $AssistantName --user-name $UserName 2>&1
+        if ($LASTEXITCODE -eq 0 -and (Test-Path $fullTmp) -and (Get-Item $fullTmp).Length -gt 80) {
+          Move-Item $fullTmp $fullFile -Force
+        } else {
+          Remove-Item $fullTmp -Force -ErrorAction SilentlyContinue
+        }
       }
     }
   }
