@@ -40,6 +40,9 @@ window.__ModuleLoader__.load({
 .dsh-mem-btn.primary { background: #c8763f; border-color: #c8763f; color: #1a1206; font-weight: 600; }
 .dsh-mem-btn:disabled { opacity: .5; cursor: default; }
 .dsh-mem-hint { font-size: 12px; opacity: .7; }
+.dsh-mem-note { padding: 12px 14px; border-radius: 10px; border: 1px dashed rgba(127,127,127,.45); background: rgba(200,118,63,.07); }
+.dsh-mem-note-t { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+.dsh-mem-note-d { font-size: 12px; line-height: 1.65; opacity: .85; }
 .dsh-mem-pre {
   margin: 10px 0 0; padding: 10px 12px; border-radius: 8px;
   background: rgba(127,127,127,.07);
@@ -144,6 +147,18 @@ window.__ModuleLoader__.load({
 			return h(
 				"div",
 				{ className: "dsh-mem-root" },
+				// 顶部说明
+				h(
+					"div",
+					{ className: "dsh-mem-note" },
+					h("div", { className: "dsh-mem-note-t" }, "这份账本，配人格才活"),
+					h(
+						"div",
+						{ className: "dsh-mem-note-d" },
+						"归档只负责把说过的话留下。配上人格——那个跟你说话的角色——它才会去翻，",
+						"才会在你说「上次不是说过」的时候真的找到，而不是含糊过去。",
+					),
+				),
 				// DSH
 				h(
 					"div",
