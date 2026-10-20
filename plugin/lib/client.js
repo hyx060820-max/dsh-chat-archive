@@ -35,6 +35,10 @@ window.__ModuleLoader__.load({
 .dsh-mem-field span { display: block; font-size: 12px; opacity: .7; margin-bottom: 5px; }
 .dsh-mem-field input { width: 100%; box-sizing: border-box; padding: 7px 9px; border-radius: 7px; background: rgba(127,127,127,.07); border: 1px solid rgba(127,127,127,.35); color: inherit; font: inherit; font-size: 13px; }
 .dsh-mem-field input:focus { outline: none; border-color: #c8763f; }
+.dsh-mem-grp { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 12.5px; }
+.dsh-mem-grp .n { font-family: ui-monospace, Consolas, monospace; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dsh-mem-grp input { width: 120px; padding: 4px 8px; border-radius: 6px; background: rgba(127,127,127,.07); border: 1px solid rgba(127,127,127,.35); color: inherit; font: inherit; font-size: 12.5px; }
+.dsh-mem-grp input:focus { outline: none; border-color: #c8763f; }
 .dsh-mem-field textarea {
   width: 100%; box-sizing: border-box; padding: 8px 10px; border-radius: 7px;
   background: rgba(127,127,127,.07); border: 1px solid rgba(127,127,127,.35);
@@ -455,6 +459,55 @@ window.__ModuleLoader__.load({
 							h("input", { value: s.userName, onChange: (e) => mutate((n) => { n.userName = e.target.value; }) }),
 						),
 					),
+				),
+				// 分开存
+				h(
+					"div",
+					{ className: "dsh-mem-card" + (s.split ? "" : " off") },
+					h(
+						"div",
+						{ className: "dsh-mem-row" },
+						h(
+							"div",
+							{ className: "dsh-mem-grow" },
+							h("div", { className: "dsh-mem-name" }, "每个工作区各存一份"),
+							h(
+								"div",
+								{ className: "dsh-mem-meta" },
+								s.split
+									? "存到 <存档>/<分组>/<工作区>/<日期>/"
+									: "关着：所有工作区混在 <存档>/<日期>/ 里",
+							),
+						),
+						h(Switch, {
+							checked: !!s.split,
+							title: "按工作区分开存",
+							onChange: (v) => mutate((n2) => { n2.split = v; }),
+						}),
+					),
+					s.split
+						? h(
+								"div",
+								{ style: { marginTop: 10 } },
+								h(
+									"div",
+									{ className: "dsh-mem-hint" },
+									"分组可以不填，不填就用工作区自己的名字。",
+								),
+								ws.map((w) =>
+									h(
+										"label",
+										{ className: "dsh-mem-grp", key: "grp-" + w.name },
+										h("span", { className: "n" }, w.label || w.name),
+										h("input", {
+											placeholder: "分组（可空）",
+											value: (s.groups && s.groups[w.name]) || "",
+											onChange: (e) => mutate((n2) => { n2.groups = Object.assign({}, n2.groups, { [w.name]: e.target.value }); }),
+										}),
+									),
+								),
+							)
+						: null,
 				),
 				// 版本与反馈
 				h(

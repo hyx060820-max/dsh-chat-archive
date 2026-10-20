@@ -12,7 +12,7 @@
 // 存储：$DSH_HOME/dsh-memory/settings.json
 import { execFile } from 'node:child_process';
 import { openSync, closeSync, readSync, mkdirSync, readFileSync, writeFileSync, existsSync, readdirSync, statSync, copyFileSync, renameSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, resolve, basename } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import zlib from 'node:zlib';
@@ -33,6 +33,9 @@ const DEFAULTS = {
   },
   // 到点自己跑。只在 DSH 开着的时候有效
   schedule: { enabled: false, at: '23:00', lastRun: null },
+  // 每个工作区各存一份，路径是 <分组>/<工作区>/<日期>/
+  split: false,
+  groups: {},
   // 往各工作区的 AGENTS.md 里写一块「开头读关于我」
   startup: { enabled: false, lastRun: null },
   // 输入框右边那个「读关于我」按钮，显示还是藏着
@@ -85,6 +88,8 @@ function readSettings() {
       dsh: { ...DEFAULTS.sources.dsh, ...(saved.sources?.dsh ?? {}) },
     },
     schedule: { ...DEFAULTS.schedule, ...(saved.schedule ?? {}) },
+    split: saved.split ?? DEFAULTS.split,
+    groups: { ...DEFAULTS.groups, ...(saved.groups ?? {}) },
     startup: { ...DEFAULTS.startup, ...(saved.startup ?? {}) },
     button: { ...DEFAULTS.button, ...(saved.button ?? {}) },
   };
@@ -159,21 +164,37 @@ function scanDsh(root) {
   return { exists: true, root: base, workspaces: out };
 }
 
+// 分开存之后，日期目录可能埋在 <分组>/<工作区>/ 下面，所以往下找
+function findDayDirs(dir, out = [], depth = 0) {
+  if (depth > 4) return out;
+  let entries;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return out;
+  }
+  for (const d of entries) {
+    if (!d.isDirectory()) continue;
+    const full = join(dir, d.name);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(d.name)) out.push({ day: d.name, dir: full });
+    else findDayDirs(full, out, depth + 1);
+  }
+  return out;
+}
+
 function latestLog(s) {
   const root = expand(s.root);
   if (!existsSync(root)) return null;
-  const days = readdirSync(root, { withFileTypes: true })
-    .filter((d) => d.isDirectory() && /^\d{4}-\d{2}-\d{2}$/.test(d.name))
-    .map((d) => d.name)
-    .sort();
-  if (!days.length) return null;
-  const day = days[days.length - 1];
-  const f = join(root, day, '备份记录.md');
-  return existsSync(f) ? { day, text: readFileSync(f, 'utf8') } : null;
+  const days = findDayDirs(root).sort((a, b) => a.day.localeCompare(b.day));
+  for (let i = days.length - 1; i >= 0; i -= 1) {
+    const f = join(days[i].dir, '备份记录.md');
+    if (existsSync(f)) return { day: days[i].day, text: readFileSync(f, 'utf8') };
+  }
+  return null;
 }
 
 // ── 跑备份 ──────────────────────────────────────────────────
-function runBackup(s, format) {
+function runBackup(s, format, job = {}) {
   return new Promise((resolvePromise) => {
     const repo = repoRoot(s);
     const script = join(repo, 'backup-chat.ps1');
@@ -184,12 +205,15 @@ function runBackup(s, format) {
       '-NoProfile', '-ExecutionPolicy', 'Bypass',
       '-File', script,
       '-Format', format,
-      '-Root', expand(s.root),
+      '-Root', job.root ?? expand(s.root),
       '-AssistantName', s.assistantName,
       '-UserName', s.userName,
     ];
     const src = s.sources[format] ?? {};
-    if (format === 'dsh' && !src.all && src.workspaces?.length) {
+    if (job.workspace) {
+      // 分开存时只跑这一个工作区
+      args.push('-WorkspaceList', job.workspace);
+    } else if (format === 'dsh' && !src.all && src.workspaces?.length) {
       args.push('-WorkspaceList', src.workspaces.join(','));
     }
     const opts = { cwd: repo, timeout: 180000, windowsHide: true, maxBuffer: 4 << 20 };
@@ -217,9 +241,30 @@ const dayKey = (d) => {
 // 手动和定时走同一条路
 async function runEnabled(s) {
   const wanted = ['dsh'].filter((k) => s.sources[k]?.enabled);
-  if (!wanted.length) return { ok: false, error: '两个来源都关着', results: [] };
+  if (!wanted.length) return { ok: false, error: '来源关着', results: [] };
+
+  // 不分开：一次跑完，全落到 <Root>/<日期>/
+  // 分开：每个工作区各跑一次，落到 <Root>/<分组>/<工作区>/<日期>/
+  const jobs = [];
+  if (s.split) {
+    for (const w of selectedWorkspaces(s)) {
+      const group = String(s.groups?.[w.name] ?? '').trim();
+      // 目录名用工作区真实路径的末段：D:\AI\default-workspace → default-workspace
+      const folder = w.label ? basename(w.label) : w.name;
+      jobs.push({
+        workspace: w.name,
+        root: group ? join(expand(s.root), group, folder) : join(expand(s.root), folder),
+      });
+    }
+    if (!jobs.length) return { ok: false, error: '没有勾选任何工作区', results: [] };
+  } else {
+    jobs.push({});
+  }
+
   const results = [];
-  for (const f of wanted) results.push(await runBackup(s, f));
+  for (const job of jobs) {
+    for (const f of wanted) results.push(await runBackup(s, f, job));
+  }
   return { ok: results.every((r) => r.code === 0), results, lastLog: latestLog(s) };
 }
 
@@ -463,6 +508,8 @@ function apply(ctx) {
         dsh: { ...cur.sources.dsh, ...(patch.settings?.sources?.dsh ?? {}) },
       },
       schedule: { ...cur.schedule, ...(patch.settings?.schedule ?? {}) },
+      split: patch.settings?.split ?? cur.split,
+      groups: { ...cur.groups, ...(patch.settings?.groups ?? {}) },
       startup: { ...cur.startup, ...(patch.settings?.startup ?? {}) },
       button: { ...cur.button, ...(patch.settings?.button ?? {}) },
     };

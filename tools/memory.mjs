@@ -53,13 +53,28 @@ const die = (msg, code = 1) => {
   process.exit(code);
 };
 
+// 存档可能是平铺的 <Root>/<日期>/，也可能是分开存的 <Root>/<分组>/<工作区>/<日期>/。
+// 所以往下找，不假设层级。
 function dayDirs() {
   if (!fs.existsSync(root)) return [];
-  return fs
-    .readdirSync(root, { withFileTypes: true })
-    .filter((d) => d.isDirectory() && /^\d{4}-\d{2}-\d{2}$/.test(d.name))
-    .map((d) => d.name)
-    .sort();
+  const out = [];
+  const walk = (dir, depth) => {
+    if (depth > 4) return;
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (!e.isDirectory()) continue;
+      const full = path.join(dir, e.name);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(e.name)) out.push({ day: e.name, dir: full });
+      else walk(full, depth + 1);
+    }
+  };
+  walk(root, 0);
+  return out.sort((a, b) => a.day.localeCompare(b.day));
 }
 
 // ── 归档 ────────────────────────────────────────────────────
@@ -112,8 +127,8 @@ function search(keyword, { days, limit }) {
 
   const kw = keyword.toLowerCase();
   const hits = [];
-  for (const day of take) {
-    const dir = path.join(root, day, '聊天');
+  for (const { day, dir: dayRoot } of take) {
+    const dir = path.join(dayRoot, '聊天');
     if (!fs.existsSync(dir)) continue;
     for (const f of fs.readdirSync(dir).filter((n) => n.endsWith('.txt'))) {
       const text = fs.readFileSync(path.join(dir, f), 'utf8');
@@ -149,8 +164,8 @@ function search(keyword, { days, limit }) {
 function days_() {
   const list = dayDirs();
   if (!list.length) return die(`存档目录里还没有任何一天：${root}`);
-  for (const d of list) {
-    const chat = path.join(root, d, '聊天');
+  for (const { day: d, dir: dayRoot } of list) {
+    const chat = path.join(dayRoot, '聊天');
     let msgs = 0;
     let bytes = 0;
     if (fs.existsSync(chat)) {
@@ -161,7 +176,7 @@ function days_() {
         bytes += fs.statSync(p).size;
       }
     }
-    console.log(`${d}  ${msgs} 条消息  ${(bytes / 1024).toFixed(0)} KB`);
+    console.log(`${d}  ${msgs} 条消息  ${(bytes / 1024).toFixed(0)} KB  ${dayRoot === root ? "" : path.relative(root, dayRoot)}`);
   }
   console.log(`\n共 ${list.length} 天。目录：${root}`);
 }
