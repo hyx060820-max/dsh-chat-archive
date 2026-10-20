@@ -33,7 +33,7 @@
 #>
 [CmdletBinding()]
 param(
-  [ValidateSet('dsh', 'codex')]
+  [ValidateSet('dsh', 'codex', 'workbuddy')]
   [string]$Format = 'dsh',
   [string]$Sessions = '',
   [string]$Root = '',
@@ -53,12 +53,20 @@ $ErrorActionPreference = 'Continue'
 try { [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false) } catch { }
 
 if (-not $Sessions) {
-  $Sessions = if ($Format -eq 'codex') { Join-Path $HOME '.codex\sessions' } else { Join-Path $HOME '.dsh\sessions' }
+  $Sessions = switch ($Format) {
+    'codex'     { Join-Path $HOME '.codex\sessions' }
+    'workbuddy' { Join-Path $HOME '.workbuddy\projects' }
+    default     { Join-Path $HOME '.dsh\sessions' }
+  }
 }
 if (-not $Root)     { $Root     = Join-Path $HOME 'dsh-memory' }
 if (-not $Exporter) { $Exporter = Join-Path $PSScriptRoot 'export-session.mjs' }
-if (-not $Pattern)  { $Pattern  = if ($Format -eq 'codex') { 'rollout-*.jsonl' } else { 'session.v4.jsonl.zstd' } }
-$RawExt = if ($Format -eq 'codex') { '.jsonl' } else { '.zstd' }
+if (-not $Pattern)  { $Pattern  = switch ($Format) {
+    'codex'     { 'rollout-*.jsonl' }
+    'workbuddy' { '*.jsonl' }
+    default     { 'session.v4.jsonl.zstd' }
+  } }
+$RawExt = if ($Format -eq 'dsh') { '.zstd' } else { '.jsonl' }
 
 # -WorkspaceList 只是 -Workspace 的字符串写法
 if ($Workspace.Count -eq 0 -and $WorkspaceList) {
@@ -156,8 +164,8 @@ try {
     }
   }
   if ($targets.Count -eq 0) {
-    if ($Format -eq 'codex') {
-      # Codex 一场对话一个文件，把这两天动过的都收进来
+    if ($Format -eq 'codex' -or $Format -eq 'workbuddy') {
+      # 这两种是一场对话一个文件，把这两天动过的都收进来
       $cut = $Now.Date.AddDays(-1)
       $targets = @($all | Where-Object { $_.LastWriteTime -ge $cut } | Sort-Object LastWriteTime)
     } else {
@@ -180,7 +188,8 @@ try {
         $rel   = $t.FullName.Substring($base.Length).TrimStart('\')
         $parts = $rel -split '\\'
         $ws    = $parts[0]
-        $sid   = $parts[1]
+        # DSH 的会话是目录名；WorkBuddy 是文件名
+        $sid   = if ($parts[1] -like '*.jsonl') { [IO.Path]::GetFileNameWithoutExtension($parts[1]) } else { $parts[1] }
       }
       $items += [pscustomobject]@{ File = $t; Ws = $ws; Sid = $sid }
       $log.Add("会话：$sid  （$([math]::Round($t.Length / 1KB)) KB）")

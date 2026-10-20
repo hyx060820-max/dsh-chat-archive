@@ -125,6 +125,24 @@ try {
     "$n 条消息"
   }
 
+  # ── 5b. 导出器：workbuddy ──
+  Test-Check '导出自检 workbuddy' {
+    $wbRoot = Join-Path $HOME '.workbuddy\projects'
+    if (-not (Test-Path $wbRoot)) { return 'SKIP: 这台机器上没有 WorkBuddy' }
+    $wbFile = Get-ChildItem $wbRoot -Recurse -File -Filter '*.jsonl' -ErrorAction SilentlyContinue |
+      Where-Object { $_.Name -notlike '*rollback*' } |
+      Sort-Object Length -Descending | Select-Object -First 1
+    if (-not $wbFile) { return 'SKIP: 没有 WorkBuddy 会话' }
+    $out = Join-Path $work 'wb.txt'
+    & node $exporter $wbFile.FullName $out --txt --format workbuddy 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "导出失败 exit $LASTEXITCODE" }
+    $n = @(Select-String -Path $out -Pattern '^\[[^\]]+\] ' -Encoding UTF8 -AllMatches).Count
+    if ($n -lt 1) { throw '一条消息都没出来' }
+    $junk = @(Select-String -Path $out -Pattern 'system-reminder' -AllMatches).Count
+    if ($junk -gt 0) { throw "有 $junk 处 system-reminder 没剥干净" }
+    "$n 条消息，注入块已剥掉"
+  }
+
   # ── 6. 自动识别不许认错 ──
   Test-Check '自动识别' {
     if (-not $dshFile) { return 'SKIP: 没有样本' }

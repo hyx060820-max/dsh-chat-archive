@@ -211,6 +211,30 @@ window.__ModuleLoader__.load({
 						h(Switch, { checked: sc.enabled, title: "启用 Codex", onChange: (v) => mutate((n) => { n.sources.codex.enabled = v; }) }),
 					),
 				),
+				// WorkBuddy
+				h(
+					"div",
+					{ className: "dsh-mem-card" + (s.sources.workbuddy.enabled ? "" : " off") },
+					h(
+						"div",
+						{ className: "dsh-mem-row" },
+						h(
+							"div",
+							{ className: "dsh-mem-grow" },
+							h("div", { className: "dsh-mem-name" }, "WorkBuddy 会话"),
+							h(
+								"div",
+								{ className: "dsh-mem-meta" },
+								s.sources.workbuddy.enabled ? "会一起备份" : "关着，一次都不跑",
+							),
+						),
+						h(Switch, {
+							checked: s.sources.workbuddy.enabled,
+							title: "启用 WorkBuddy",
+							onChange: (v) => mutate((n) => { n.sources.workbuddy.enabled = v; }),
+						}),
+					),
+				),
 				// 自动备份
 				h(
 					"div",

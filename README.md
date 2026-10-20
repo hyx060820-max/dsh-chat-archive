@@ -60,9 +60,13 @@ DSH 和 Codex 都会把会话落到本地，但落成了压缩的二进制。
 |---|---|---|
 | `dsh` | DSH（DeepSeek Harness） | `~/.dsh/sessions/<工作区>/<会话ID>/session.v4.jsonl.zstd` |
 | `codex` | Codex CLI | `~/.codex/sessions/<年>/<月>/<日>/rollout-*.jsonl` |
+| `workbuddy` | WorkBuddy（腾讯） | `~/.workbuddy/projects/<项目>/<会话ID>.jsonl` |
 
-DSH 那份是多帧 zstd 拼起来的，要自己切帧解压；Codex 是纯文本 JSONL。
+DSH 那份是多帧 zstd 拼起来的，要自己切帧解压；Codex 和 WorkBuddy 是纯文本 JSONL。
 差别都关在 `sources/` 里，导出和备份的逻辑不分叉。
+
+WorkBuddy 的用户消息前面裹着一段 `<system-reminder>` 注入内容（系统提示、模式切换），
+不是人说的话，适配器会剥掉。
 
 ## 依赖
 
@@ -228,7 +232,7 @@ Codex 来源的原始文件叫 `原始\codex\<rollout 名>.jsonl`，会话 ID �
 
 | 参数 | 默认 | 说明 |
 |---|---|---|
-| `-Format` | `dsh` | 来源格式：`dsh` 或 `codex` |
+| `-Format` | `dsh` | 来源格式：`dsh`、`codex` 或 `workbuddy` |
 | `-Sessions` | 按格式取（见上表） | 会话目录 |
 | `-Pattern` | 按格式取 | 会话文件名通配 |
 | `-Root` | `~/dsh-memory` | 输出根目录 |

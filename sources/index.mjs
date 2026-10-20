@@ -2,8 +2,9 @@
 // 导出 name / label / patterns / detect(file) / read(file)，再登记到下面。
 import * as dsh from './dsh.mjs';
 import * as codex from './codex.mjs';
+import * as workbuddy from './workbuddy.mjs';
 
-export const adapters = [dsh, codex];
+export const adapters = [dsh, codex, workbuddy];
 
 export const names = () => adapters.map((a) => a.name);
 
