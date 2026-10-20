@@ -83,6 +83,7 @@ window.__ModuleLoader__.load({
 			const [err, setErr] = react.useState("");
 			const [hint, setHint] = react.useState("");
 			const [busy, setBusy] = react.useState(false);
+			const [startupMsg, setStartupMsg] = react.useState("");
 			const [result, setResult] = react.useState(null);
 
 			const load = () =>
@@ -135,6 +136,21 @@ window.__ModuleLoader__.load({
 					await load();
 				} catch (e) {
 					setResult({ ok: false, results: [{ format: "-", code: -1, out: String(e.message || e) }] });
+				} finally {
+					setBusy(false);
+				}
+			};
+
+			const applyStartup = async () => {
+				setBusy(true);
+				try {
+					if (!(await save())) return;
+					const d = await getJson("/startup", { method: "POST", body: JSON.stringify({ enabled: !!s.startup.enabled }) });
+					const n = (d.results || []).filter((r) => r.changed).length;
+					setStartupMsg((s.startup.enabled ? "写入 " : "撤掉 ") + n + " 个，共 " + (d.results || []).length + " 个选中工作区");
+					await load();
+				} catch (e) {
+					setStartupMsg("失败：" + (e.message || e));
 				} finally {
 					setBusy(false);
 				}
@@ -240,6 +256,45 @@ window.__ModuleLoader__.load({
 					st.me && st.me.exists
 						? h("pre", { className: "dsh-mem-pre", style: { maxHeight: 180 } }, st.me.text)
 						: null,
+				),
+				// 启动时读取关于我
+				h(
+					"div",
+					{ className: "dsh-mem-card" + (s.startup.enabled ? "" : " off") },
+					h(
+						"div",
+						{ className: "dsh-mem-row" },
+						h(
+							"div",
+							{ className: "dsh-mem-grow" },
+							h("div", { className: "dsh-mem-name" }, "启动时读取关于我"),
+							h(
+								"div",
+								{ className: "dsh-mem-meta" },
+								st.startup && st.startup.items
+									? (st.startup.applied
+										? "已写入 " + st.startup.items.length + " 个工作区"
+										: "已写入 " + st.startup.items.filter((i) => i.applied).length + " / " + st.startup.items.length + " 个")
+									: "按上面勾选的工作区",
+							),
+						),
+						h(Switch, {
+							checked: !!s.startup.enabled,
+							title: "启动时读取关于我",
+							onChange: (v) => mutate((n) => { n.startup.enabled = v; }),
+						}),
+					),
+					h(
+						"div",
+						{ className: "dsh-mem-hint", style: { marginTop: 8 } },
+						"上下文一长，AI 可能忘了前面读到的。开着更稳：每个会话开头都会重新读一遍档案。",
+					),
+					h(
+						"div",
+						{ className: "dsh-mem-bar", style: { marginTop: 10 } },
+						h("button", { className: "dsh-mem-btn", disabled: busy, onClick: applyStartup }, s.startup.enabled ? "写入工作区" : "撤掉"),
+						h("span", { className: "dsh-mem-hint" }, startupMsg),
+					),
 				),
 				// 自动备份
 				h(

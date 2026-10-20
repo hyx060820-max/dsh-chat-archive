@@ -10,7 +10,7 @@
 //
 // 存储：$DSH_HOME/dsh-memory/settings.json
 import { execFile } from 'node:child_process';
-import { openSync, closeSync, readSync, mkdirSync, readFileSync, writeFileSync, existsSync, readdirSync, statSync } from 'node:fs';
+import { openSync, closeSync, readSync, mkdirSync, readFileSync, writeFileSync, existsSync, readdirSync, statSync, copyFileSync, renameSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import zlib from 'node:zlib';
@@ -30,6 +30,8 @@ const DEFAULTS = {
   },
   // 到点自己跑。只在 DSH 开着的时候有效
   schedule: { enabled: false, at: '23:00', lastRun: null },
+  // 往各工作区的 AGENTS.md 里写一块「开头读关于我」
+  startup: { enabled: false, lastRun: null },
 };
 
 const expand = (p) => (p && p.startsWith('~') ? join(homedir(), p.slice(1)) : p);
@@ -48,6 +50,7 @@ function readSettings() {
       dsh: { ...DEFAULTS.sources.dsh, ...(saved.sources?.dsh ?? {}) },
     },
     schedule: { ...DEFAULTS.schedule, ...(saved.schedule ?? {}) },
+    startup: { ...DEFAULTS.startup, ...(saved.startup ?? {}) },
   };
 }
 
@@ -183,6 +186,104 @@ async function runEnabled(s) {
   return { ok: results.every((r) => r.code === 0), results, lastLog: latestLog(s) };
 }
 
+// ── 启动时读取关于我 ────────────────────────────────────────
+// 给「选中的工作区」各写一块 AGENTS.md 标记。
+// DSH 启动后，那些工作区的每个会话第一次请求都会加载它。
+// 只动标记之间；写之前备份；关掉就撤。
+const DSH_HOME = process.env.DSH_HOME || join(homedir(), '.dsh');
+const MARK_START = '<!-- dsh-memory:start -->';
+const MARK_END = '<!-- dsh-memory:end -->';
+const MARK_RE = new RegExp(MARK_START + '[\\s\\S]*?' + MARK_END);
+
+function startupBlock(s) {
+  const me = join(expand(s.root), '关于我.md');
+  return [
+    MARK_START,
+    '## 记忆',
+    '',
+    `用户档案在 \`${me}\`。`,
+    '',
+    '- **每个会话开头先读一遍。** 读完不要复述，直接用。',
+    '- 档案里没写的事，不要编。不确定就问一句。',
+    '- 聊到会反复用到的新事实，追加进那份档案，并说一声改了什么。',
+    MARK_END,
+  ].join('\n');
+}
+
+// 选中的工作区（all = 全部）
+function selectedWorkspaces(s) {
+  const st = scanDsh(join(DSH_HOME, 'sessions'));
+  return st.workspaces.filter((w) => s.sources.dsh.all || (s.sources.dsh.workspaces ?? []).includes(w.name));
+}
+
+function agentsPathOf(w) {
+  return w.label ? join(w.label, 'AGENTS.md') : null;
+}
+
+function writeBlock(f, text, block) {
+  let next;
+  if (MARK_RE.test(text)) next = text.replace(MARK_RE, block);
+  else next = text.trimEnd() ? text.trimEnd() + '\n\n' + block + '\n' : block + '\n';
+  if (next === text) return false;
+  mkdirSync(dirnameOf(f), { recursive: true });
+  if (existsSync(f) && !existsSync(f + '.bak')) copyFileSync(f, f + '.bak');
+  const tmp = f + '.tmp';
+  writeFileSync(tmp, next, 'utf8');
+  renameSync(tmp, f);
+  return true;
+}
+
+function removeBlock(f, text) {
+  if (!MARK_RE.test(text)) return false;
+  const next = text.replace(MARK_RE, '').replace(/\n{3,}/g, '\n\n').trimEnd() + '\n';
+  const tmp = f + '.tmp';
+  writeFileSync(tmp, next, 'utf8');
+  renameSync(tmp, f);
+  return true;
+}
+
+const dirnameOf = (f) => f.slice(0, Math.max(f.lastIndexOf('\\'), f.lastIndexOf('/')));
+
+function applyStartup(s, on) {
+  const block = startupBlock(s);
+  const out = [];
+  for (const w of selectedWorkspaces(s)) {
+    const f = agentsPathOf(w);
+    if (!f) {
+      out.push({ name: w.name, ok: false, note: '拿不到这个工作区的目录' });
+      continue;
+    }
+    const text = existsSync(f) ? readFileSync(f, 'utf8') : '';
+    try {
+      const changed = on ? writeBlock(f, text, block) : removeBlock(f, text);
+      const dup = on && !MARK_RE.test(text) && text.includes('关于我.md');
+      out.push({
+        name: w.name,
+        ok: true,
+        changed,
+        path: f,
+        note: changed ? (dup ? '这个文件里本来就有关于我的说明，现在有两处，建议自己删一处' : '') : on ? '本来就是最新' : '没有块',
+      });
+    } catch (e) {
+      out.push({ name: w.name, ok: false, note: String(e?.message ?? e) });
+    }
+  }
+  return out;
+}
+
+function startupStatus(s) {
+  const items = selectedWorkspaces(s).map((w) => {
+    const f = agentsPathOf(w);
+    let applied = false;
+    try {
+      applied = !!(f && existsSync(f) && MARK_RE.test(readFileSync(f, 'utf8')));
+    } catch {
+      applied = false;
+    }
+    return { name: w.name, cwd: w.label, path: f, applied };
+  });
+  return { items, applied: items.length > 0 && items.every((i) => i.applied) };
+}
 // ── 路由 ────────────────────────────────────────────────────
 const LOCAL_HOST_RE = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
 
@@ -239,6 +340,7 @@ function statePayload(s) {
     paths: { root: expand(s.root), repo: expand(s.repo) },
     node: process.version,
     me: meInfo(s),
+    startup: startupStatus(s),
     dsh: scanDsh(join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'sessions')),
     lastLog: latestLog(s),
   };
@@ -275,6 +377,7 @@ function apply(ctx) {
         dsh: { ...cur.sources.dsh, ...(patch.settings?.sources?.dsh ?? {}) },
       },
       schedule: { ...cur.schedule, ...(patch.settings?.schedule ?? {}) },
+      startup: { ...cur.startup, ...(patch.settings?.startup ?? {}) },
     };
     if (!/^([01]?\d|2[0-3]):[0-5]\d$/.test(String(next.schedule.at ?? ''))) {
       return sendJson(res, 400, { ok: false, error: `时间要写成 HH:mm，收到：${next.schedule.at}` });
@@ -284,6 +387,17 @@ function apply(ctx) {
     }
     writeSettings(next);
     sendJson(res, 200, { ok: true, settings: next });
+  });
+
+  on('/dsh-memory/startup', async (req, res) => {
+    const body = await readJson(req);
+    const s = readSettings();
+    const on = !!body.enabled;
+    const results = applyStartup(s, on);
+    const next = readSettings();
+    next.startup = { ...next.startup, enabled: on, lastRun: { at: new Date().toISOString(), n: results.length } };
+    writeSettings(next);
+    sendJson(res, 200, { ok: true, results, startup: startupStatus(next) });
   });
 
   on('/dsh-memory/run', async (req, res) => {
