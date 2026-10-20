@@ -41,10 +41,16 @@ const DEFAULTS = {
 
 const expand = (p) => (p && p.startsWith('~') ? join(homedir(), p.slice(1)) : p);
 
-// 插件包自己的根：lib/index.js 往上两层。
-// 从 Git / npm 装的时候，仓库里的备份脚本就在这个根下，所以别人不用配路径也能跑。
-const PKG_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..');
+// 插件包自己的根。两种布局都会出现：
+//   装好的包   node_modules/dsh-memory/lib/index.js      → 上一层
+//   仓库源码   <repo>/plugin/lib/index.js                → 上两层
+// 优先选带 backup-chat.ps1 的那层；没有再退回带 package.json 的那层。
+const MODULE_DIR = fileURLToPath(new URL('.', import.meta.url));
 const hasScript = (dir) => !!dir && existsSync(join(dir, 'backup-chat.ps1'));
+const PKG_ROOT = (() => {
+  const up = ['..', '../..', '../../..'].map((r) => resolve(MODULE_DIR, r));
+  return up.find(hasScript) ?? up.find((d) => existsSync(join(d, 'package.json'))) ?? up[1];
+})();
 
 // 仓库地址：更新检查和留言反馈都指向这里
 const REPO_URL = 'https://github.com/hyx060820-max/dsh-chat-archive';

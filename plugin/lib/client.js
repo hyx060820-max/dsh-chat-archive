@@ -436,6 +436,11 @@ window.__ModuleLoader__.load({
 					),
 					h(
 						"div",
+						{ className: "dsh-mem-hint", style: { marginTop: 4 } },
+						"实际用：" + ((st.paths && st.paths.repo) || "（未确定）"),
+					),
+					h(
+						"div",
 						{ style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 14px" } },
 						h(
 							"label",
