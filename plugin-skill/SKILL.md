@@ -1,0 +1,74 @@
+---
+name: memory-archive
+slug: memory-archive
+display_name: 记忆体
+display_name_en: Memory Archive
+description: "把聊天会话按天归档成能搜的文本，并在需要时找回以前说过的事。触发词：记忆、记忆体、归档、聊天记录、之前说过、上次提到。"
+description_zh: "把聊天会话按天归档成能搜的文本，并在需要时找回以前说过的事。"
+description_en: "Archive chat sessions by day into searchable text; look up what was said before."
+summary: "给 agent 一份能翻回来的账：归档、搜索。"
+category: productivity
+version: "0.1.0"
+user-invocable: true
+---
+
+# 记忆体
+
+聊天记录不该随对话关掉就散掉。这个技能做两件事：**归档**、**搜回来**。
+
+真正的活由仓库里的脚本干，你只负责调用。
+
+## 两个命令
+
+```powershell
+# 归档（默认 dsh；也能 codex / workbuddy / all）
+node "{{REPO}}\tools\memory.mjs" archive --format {{FORMAT}}
+
+# 搜记忆
+node "{{REPO}}\tools\memory.mjs" search 关键词 --days 30 --limit 20
+
+# 有哪些天
+node "{{REPO}}\tools\memory.mjs" days
+```
+
+存档默认在 `~/dsh-memory`，一天一个目录：
+
+```
+<存档>\2026-10-20\
+├─ 聊天\2026-10-20.txt        纯文本，能搜
+├─ 图片\                      对话里引用过的图
+├─ 完整\                      带工具调用，追查用
+├─ 原始\                      原样快照
+└─ 备份记录.md
+```
+
+## 什么时候该用
+
+**搜**（先搜再回答，别猜）：
+
+- 用户说「之前」「上次」「你不是说过」「还记得吗」
+- 用户问的某件事可能在他们过去的对话里出现过
+- 需要引用用户的具体偏好、约定、历史决定
+
+**归档**：
+
+- 用户明确说「记一下」「归档」「存一份」
+- 一段较长的任务收尾时
+- 用户问「你会记得吗」
+
+**不要**：
+
+- 每次对话都归档（这是定时任务该干的事）
+- 在没搜到的时候编造「你上次说过」——搜不到就说没找到
+
+## 搜不到的时候
+
+`search` 会打印「没有找到」。这时如实说没找到，不要拿印象补。
+
+如果存档目录还不存在，先跑一次 `archive`。
+
+## 边界
+
+- 归档是**复制**，不删任何东西
+- 只归档聊天和聊天里的图，不含凭据、插件配置、工作区文件
+- 图片按 `sha256` 命名，文本里留了短标记对应

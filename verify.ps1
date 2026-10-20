@@ -71,7 +71,7 @@ Test-Check 'ps1 带 BOM' {
 # ── 2. mjs 语法 ──
 Test-Check 'mjs 语法' {
   if (-not (Get-Command node -ErrorAction SilentlyContinue)) { return 'SKIP: 没装 node' }
-  $files = @(Get-ChildItem $repo -Filter '*.mjs' -File) + @(Get-ChildItem (Join-Path $repo 'sources') -Filter '*.mjs' -File -ErrorAction SilentlyContinue)
+  $files = @(Get-ChildItem $repo -Filter '*.mjs' -File) + @(Get-ChildItem (Join-Path $repo 'sources') -Filter '*.mjs' -File -ErrorAction SilentlyContinue) + @(Get-ChildItem (Join-Path $repo 'tools') -Filter '*.mjs' -File -ErrorAction SilentlyContinue)
   $bad = @()
   foreach ($f in $files) {
     & node --check $f.FullName 2>&1 | Out-Null
@@ -210,6 +210,18 @@ try {
     if (-not $pkg.dsh.bundle) { throw 'package.json 缺 dsh.bundle' }
     if (-not (Test-Path (Join-Path $dir 'cordis.patch.yml'))) { throw '缺 cordis.patch.yml' }
     "$($js.Count) 个文件通过"
+  }
+
+  # ── 7c3. 技能版 ──
+  Test-Check '记忆体 CLI' {
+    & node (Join-Path $repo 'tools/memory.mjs') 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 2) { throw "不带参数应该 exit 2，实际 $LASTEXITCODE" }
+    $sk = Join-Path $repo 'plugin-skill\SKILL.md'
+    if (-not (Test-Path $sk)) { throw '缺 plugin-skill/SKILL.md' }
+    $head = (Get-Content $sk -Encoding UTF8 -TotalCount 1)
+    if ("$head".Trim() -ne '---') { throw 'SKILL.md 缺 frontmatter' }
+    if (-not (Get-Content $sk -Raw -Encoding UTF8).Contains('{{REPO}}')) { throw 'SKILL.md 里没有 {{REPO}} 占位，装的时候就没法替换' }
+    'usage 与占位符都在'
   }
 
   # ── 7d. 界面服务 ──

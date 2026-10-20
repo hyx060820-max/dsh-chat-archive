@@ -86,13 +86,17 @@ node -e "console.log(typeof require('node:zlib').zstdDecompressSync === 'functio
 ```
 backup-chat.ps1      调度：锁、挑会话、跑导出、校验、写记录
 export-session.mjs   命令行入口：读参数、选格式、渲染成 txt 或 md
-verify.ps1           十五项检查，提交前跑
+tools/memory.mjs     给 agent 用的 CLI：归档 / 搜记忆 / 有哪些天
+verify.ps1           十八项检查，提交前跑
 server.mjs           本地界面服务（零依赖）
 ui/index.html        界面本体（HTML + CSS + JS 全在一个文件里）
 sources/
 ├─ index.mjs         格式登记处 + 自动识别
 ├─ dsh.mjs           多帧 zstd 解帧 + 事件映射
-└─ codex.mjs         JSONL 逐行读 + 噪音过滤
+├─ codex.mjs         JSONL 逐行读 + 噪音过滤
+└─ workbuddy.mjs     JSONL 逐行读 + 剥掉注入块
+plugin/              DSH 插件「记忆体」：设置页一节
+plugin-skill/        WorkBuddy / Codex 的技能版
 .githooks/pre-push   推之前自动跑 verify.ps1
 ```
 
@@ -176,6 +180,33 @@ $env:PORT=9000; node server.mjs
 
 插件里还有一个**自动备份**开关：设个时间，DSH 开着就到点自己跑，一天一次；
 到了点但 DSH 没开，下次开起来会补一次。要关机也能跑，还是得用下面的计划任务。
+
+## WorkBuddy 和 Codex 怎么办
+
+它们没有「在设置里插一页」的入口。DSH 有，那两个的插件模型是技能和 MCP 工具，不是界面。
+
+所以给它们的是**技能版**：一份 `SKILL.md`，告诉 agent 记录在哪、怎么归档、怎么搜。
+
+```powershell
+.\plugin-skill\install.ps1 -Target both
+```
+
+装到 `~/.workbuddy/skills/` 和 `~/.codex/skills/`。不动注册表，不碰它们的配置文件；
+卸载就是删文件夹（`-Uninstall`）。
+
+| | DSH 插件 | 技能版 |
+|---|---|---|
+| 在设置里点开关 | 能 | 不能 |
+| 说一句「搜一下记忆」 | 能 | 能 |
+| 自己定时跑 | 能 | 靠系统计划任务 |
+
+技能调的是同一个 CLI：
+
+```powershell
+node tools\memory.mjs archive --format workbuddy   # 归档
+node tools\memory.mjs search 语音 --days 30        # 搜回来
+node tools\memory.mjs days                         # 有哪些天
+```
 
 ## 每天自动跑
 
