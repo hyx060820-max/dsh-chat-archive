@@ -253,7 +253,7 @@ try {
     $c = Get-Content (Join-Path $repo 'plugin/lib/client.js') -Raw -Encoding UTF8
     # 只看 MemoryPanel 那段（ReadButton 是另一个组件，它的钩子在后面是正常的）
     $from = $c.IndexOf('function MemoryPanel')
-    $to = $c.IndexOf('function useBtnShow')
+    $to = $c.IndexOf('const btnShow')
     if ($from -lt 0 -or $to -lt 0 -or $to -le $from) { throw '面板边界找不到，检查逻辑要改' }
     $panel = $c.Substring($from, $to - $from)
     $guard = $panel.IndexOf('if (!st) return')
@@ -264,6 +264,30 @@ try {
       throw "第 $line 行有 useState 在提前返回之后。React 的钩子规则一破，整个面板会变空白"
     }
     '钩子都在提前返回之前'
+  }
+
+  # ── 7c2c. 面板里变量先定义后用 ──
+  Test-Check '面板变量顺序' {
+    $c = Get-Content (Join-Path $repo 'plugin/lib/client.js') -Raw -Encoding UTF8
+    $from = $c.IndexOf('function MemoryPanel')
+    $to = $c.IndexOf('const btnShow')
+    if ($from -lt 0 -or $to -le $from) { throw '面板边界找不到' }
+    $panel = $c.Substring($from, $to - $from)
+
+    $bad = @()
+    # 只看面板顶层那一层声明（三个 tab 缩进）。内层箭头函数里的同名变量不算，会误报
+    foreach ($m in [regex]::Matches($panel, '(?m)^\t{3}const\s+([A-Za-z_$][\w$]*)\s*=')) {
+      $name = $m.Groups[1].Value
+      $decl = $m.Index
+      # 在这个 const 之前，有没有出现过这个标识符
+      $before = [regex]::Matches($panel.Substring(0, $decl), "\b$([regex]::Escape($name))\b")
+      if ($before.Count -gt 0) {
+        $line = ($panel.Substring(0, $before[0].Index) -split "`n").Count
+        $bad += "$name（第 $line 行先用，后面才 const）"
+      }
+    }
+    if ($bad.Count -gt 0) { throw ($bad -join '；') }
+    '都先定义后用'
   }
 
   # ── 7c3. 技能版 ──

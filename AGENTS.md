@@ -17,6 +17,18 @@
 git config core.hooksPath .githooks
 ```
 
+## 改完必须自己测
+
+用户原话：「每次改完都测试一下」。不是走形式。
+
+- 改完先跑 `.\verify.ps1`，21 项全过再说下一步
+- 改 `plugin/lib/client.js` 尤其要当心：**语法对不等于能渲染**。
+  设置面板已经两次整块空白——一次是 `useState` 在提前返回之后，
+  一次是变量在 `const` 声明之前被用。两项检查专盯这个，别绕过：
+  「面板钩子顺序」「面板变量顺序」
+- **带副作用的测试要在隔离目录里跑**。别拿真实 `DSH_HOME` 直接测——
+  曾经把临时路径写进真实的 `AGENTS.md`
+
 ## 改 ps1 的注意
 
 `backup-chat.ps1` 和 `verify.ps1` 必须存成 **UTF-8 with BOM**。
