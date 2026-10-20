@@ -1,6 +1,6 @@
 {
   "name": "dsh-memory",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "private": true,
   "description": "记忆体：把 DSH / Codex / WorkBuddy 的会话按天归档，并在设置里管理「关于我」",
   "keywords": ["dsh", "dsh-plugin", "deepseek-harness", "chat-archive", "memory"],
@@ -13,7 +13,7 @@
     "./client": { "default": "./plugin/lib/client.js" },
     "./package.json": "./package.json"
   },
-  "files": ["plugin", "cordis.patch.yml"],
+  "files": ["plugin", "sources", "tools", "backup-chat.ps1", "export-session.mjs", "cordis.patch.yml"],
   "dsh": {
     "bundle": { "patch": "./plugin/cordis.patch.yml" },
     "client": { "inject": [], "platform": "web" }

@@ -14,6 +14,7 @@ import { execFile } from 'node:child_process';
 import { openSync, closeSync, readSync, mkdirSync, readFileSync, writeFileSync, existsSync, readdirSync, statSync, copyFileSync, renameSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { homedir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import zlib from 'node:zlib';
 
 const DATA_DIR = join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'dsh-memory');
@@ -22,7 +23,8 @@ const name = 'dsh-memory';
 const inject = ['webServer'];
 
 const DEFAULTS = {
-  repo: 'D:\\AI\\dsh-work',
+  // 留空 = 用插件包自带的那份脚本；填了就用那个目录
+  repo: '',
   root: '~/dsh-memory',
   assistantName: '助理',
   userName: '你',
@@ -38,6 +40,19 @@ const DEFAULTS = {
 };
 
 const expand = (p) => (p && p.startsWith('~') ? join(homedir(), p.slice(1)) : p);
+
+// 插件包自己的根：lib/index.js 往上两层。
+// 从 Git / npm 装的时候，仓库里的备份脚本就在这个根下，所以别人不用配路径也能跑。
+const PKG_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..');
+const hasScript = (dir) => !!dir && existsSync(join(dir, 'backup-chat.ps1'));
+
+// 决定用哪份脚本：设置里填了且有效 → 用它；否则用包里自带的。都没有就返回设置里那个值，好让报错说清
+const repoRoot = (s) => {
+  const configured = expand(String(s?.repo ?? '').trim());
+  if (hasScript(configured)) return configured;
+  if (hasScript(PKG_ROOT)) return PKG_ROOT;
+  return configured;
+};
 
 function readSettings() {
   let saved = {};
@@ -143,7 +158,8 @@ function latestLog(s) {
 // ── 跑备份 ──────────────────────────────────────────────────
 function runBackup(s, format) {
   return new Promise((resolvePromise) => {
-    const script = join(expand(s.repo), 'backup-chat.ps1');
+    const repo = repoRoot(s);
+    const script = join(repo, 'backup-chat.ps1');
     if (!existsSync(script)) {
       return resolvePromise({ format, code: -1, out: `找不到脚本：${script}\n在设置里改一下「脚本目录」。` });
     }
@@ -159,7 +175,7 @@ function runBackup(s, format) {
     if (format === 'dsh' && !src.all && src.workspaces?.length) {
       args.push('-WorkspaceList', src.workspaces.join(','));
     }
-    const opts = { cwd: expand(s.repo), timeout: 180000, windowsHide: true, maxBuffer: 4 << 20 };
+    const opts = { cwd: repo, timeout: 180000, windowsHide: true, maxBuffer: 4 << 20 };
     const exes = [process.env.PWSH, 'pwsh', 'powershell'].filter(Boolean);
     const attempt = (i) => {
       if (i >= exes.length) return resolvePromise({ format, code: -1, out: '找不到 PowerShell（pwsh / powershell 都不在 PATH 上）' });
@@ -349,7 +365,7 @@ function statePayload(s) {
   return {
     ok: true,
     settings: s,
-    paths: { root: expand(s.root), repo: expand(s.repo) },
+    paths: { root: expand(s.root), repo: repoRoot(s), pkgRoot: PKG_ROOT },
     node: process.version,
     me: meInfo(s),
     startup: startupStatus(s),
@@ -395,8 +411,22 @@ function apply(ctx) {
     if (!/^([01]?\d|2[0-3]):[0-5]\d$/.test(String(next.schedule.at ?? ''))) {
       return sendJson(res, 400, { ok: false, error: `时间要写成 HH:mm，收到：${next.schedule.at}` });
     }
-    if (!next.repo || !existsSync(join(expand(next.repo), 'backup-chat.ps1'))) {
-      return sendJson(res, 400, { ok: false, error: `脚本目录里没有 backup-chat.ps1：${next.repo}` });
+    // 路径先 trim：输入框里一个看不见的尾随空格，就足以让 existsSync 判不存在
+    next.repo = String(next.repo ?? '').trim();
+    next.root = String(next.root ?? '').trim() || '~/dsh-memory';
+
+    // 留空 = 用插件包里自带的那份脚本。填了就必须真有一个 backup-chat.ps1
+    if (next.repo && !hasScript(expand(next.repo))) {
+      return sendJson(res, 400, {
+        ok: false,
+        error: `脚本目录里没有 backup-chat.ps1。找的是 ${JSON.stringify(join(expand(next.repo), 'backup-chat.ps1'))}。留空则用插件自带的那份（${PKG_ROOT}）`,
+      });
+    }
+    if (!next.repo && !hasScript(PKG_ROOT)) {
+      return sendJson(res, 400, {
+        ok: false,
+        error: `插件包里也没有 backup-chat.ps1（${PKG_ROOT}）。请把「脚本目录」指向一份仓库副本`,
+      });
     }
     writeSettings(next);
     sendJson(res, 200, { ok: true, settings: next });

@@ -1,6 +1,6 @@
 {
   "name": "dsh-memory",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "DSH 插件「记忆体」：把 DSH / Codex 的会话按天存档，设置里选工作区、开关来源、一键备份。",
   "keywords": ["dsh", "dsh-plugin", "deepseek-harness", "chat-archive", "memory"],
   "type": "module",

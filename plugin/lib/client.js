@@ -393,7 +393,7 @@ window.__ModuleLoader__.load({
 					h(
 						"label",
 						{ className: "dsh-mem-field" },
-						h("span", null, "脚本目录（backup-chat.ps1 所在）"),
+						h("span", null, "脚本目录（留空 = 用插件包里自带的那份）"),
 						h("input", { value: s.repo, onChange: (e) => mutate((n) => { n.repo = e.target.value; }) }),
 					),
 					h(
