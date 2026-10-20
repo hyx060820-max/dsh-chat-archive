@@ -27,8 +27,6 @@ const DEFAULTS = {
   userName: '你',
   sources: {
     dsh: { enabled: true, all: true, workspaces: [] },
-    codex: { enabled: false },
-    workbuddy: { enabled: false },
   },
   // 到点自己跑。只在 DSH 开着的时候有效
   schedule: { enabled: false, at: '23:00', lastRun: null },
@@ -48,8 +46,6 @@ function readSettings() {
     ...saved,
     sources: {
       dsh: { ...DEFAULTS.sources.dsh, ...(saved.sources?.dsh ?? {}) },
-      codex: { ...DEFAULTS.sources.codex, ...(saved.sources?.codex ?? {}) },
-      workbuddy: { ...DEFAULTS.sources.workbuddy, ...(saved.sources?.workbuddy ?? {}) },
     },
     schedule: { ...DEFAULTS.schedule, ...(saved.schedule ?? {}) },
   };
@@ -180,7 +176,7 @@ const dayKey = (d) => {
 
 // 手动和定时走同一条路
 async function runEnabled(s) {
-  const wanted = ['dsh', 'codex', 'workbuddy'].filter((k) => s.sources[k]?.enabled);
+  const wanted = ['dsh'].filter((k) => s.sources[k]?.enabled);
   if (!wanted.length) return { ok: false, error: '两个来源都关着', results: [] };
   const results = [];
   for (const f of wanted) results.push(await runBackup(s, f));
@@ -277,8 +273,6 @@ function apply(ctx) {
       ...(patch.settings ?? {}),
       sources: {
         dsh: { ...cur.sources.dsh, ...(patch.settings?.sources?.dsh ?? {}) },
-        codex: { ...cur.sources.codex, ...(patch.settings?.sources?.codex ?? {}) },
-        workbuddy: { ...cur.sources.workbuddy, ...(patch.settings?.sources?.workbuddy ?? {}) },
       },
       schedule: { ...cur.schedule, ...(patch.settings?.schedule ?? {}) },
     };

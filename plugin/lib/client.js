@@ -130,7 +130,6 @@ window.__ModuleLoader__.load({
 			};
 
 			const sd = s.sources.dsh;
-			const sc = s.sources.codex;
 			const ws = (st.dsh && st.dsh.workspaces) || [];
 			const total = ws.reduce((a, b) => a + b.sessions, 0);
 
@@ -193,46 +192,6 @@ window.__ModuleLoader__.load({
 										h("span", { className: "t" }, w.sessions + " 个会话 · " + rel(w.last)),
 									);
 								}),
-					),
-				),
-				// Codex
-				h(
-					"div",
-					{ className: "dsh-mem-card" + (sc.enabled ? "" : " off") },
-					h(
-						"div",
-						{ className: "dsh-mem-row" },
-						h(
-							"div",
-							{ className: "dsh-mem-grow" },
-							h("div", { className: "dsh-mem-name" }, "Codex CLI 会话"),
-							h("div", { className: "dsh-mem-meta" }, sc.enabled ? "会一起备份" : "关着，一次都不跑"),
-						),
-						h(Switch, { checked: sc.enabled, title: "启用 Codex", onChange: (v) => mutate((n) => { n.sources.codex.enabled = v; }) }),
-					),
-				),
-				// WorkBuddy
-				h(
-					"div",
-					{ className: "dsh-mem-card" + (s.sources.workbuddy.enabled ? "" : " off") },
-					h(
-						"div",
-						{ className: "dsh-mem-row" },
-						h(
-							"div",
-							{ className: "dsh-mem-grow" },
-							h("div", { className: "dsh-mem-name" }, "WorkBuddy 会话"),
-							h(
-								"div",
-								{ className: "dsh-mem-meta" },
-								s.sources.workbuddy.enabled ? "会一起备份" : "关着，一次都不跑",
-							),
-						),
-						h(Switch, {
-							checked: s.sources.workbuddy.enabled,
-							title: "启用 WorkBuddy",
-							onChange: (v) => mutate((n) => { n.sources.workbuddy.enabled = v; }),
-						}),
 					),
 				),
 				// 关于我
