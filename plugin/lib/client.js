@@ -11,35 +11,43 @@ window.__ModuleLoader__.load({
 
 		const STYLES = `
 .dsh-mem-root { display: flex; flex-direction: column; gap: 14px; }
-.dsh-mem-card { border: 1px solid rgba(255,255,255,.09); border-radius: 10px; padding: 14px 16px; }
+/* 用中性灰 + 透明度，浅色深色都看得清。原来写的是白色透明，浅色主题下等于没边框 */
+.dsh-mem-card { border: 1px solid rgba(127,127,127,.32); border-radius: 10px; padding: 14px 16px; background: rgba(127,127,127,.04); }
 .dsh-mem-card.off { opacity: .55; }
 .dsh-mem-row { display: flex; align-items: center; gap: 10px; }
 .dsh-mem-grow { flex: 1; min-width: 0; }
 .dsh-mem-name { font-weight: 600; font-size: 13px; }
-.dsh-mem-meta { font-size: 12px; opacity: .6; margin-top: 2px; }
+.dsh-mem-meta { font-size: 12px; opacity: .65; margin-top: 2px; }
 .dsh-mem-sw { position: relative; width: 38px; height: 21px; flex: none; cursor: pointer; display: inline-block; }
 .dsh-mem-sw input { position: absolute; opacity: 0; width: 0; height: 0; }
-.dsh-mem-sw i { position: absolute; inset: 0; background: rgba(255,255,255,.14); border-radius: 999px; transition: background .15s; }
-.dsh-mem-sw i::after { content: ""; position: absolute; top: 3px; left: 3px; width: 15px; height: 15px; border-radius: 50%; background: #8b93a3; transition: transform .15s, background .15s; }
-.dsh-mem-sw input:checked + i { background: rgba(200,118,63,.35); }
-.dsh-mem-sw input:checked + i::after { transform: translateX(17px); background: #c8763f; }
-.dsh-mem-wshead { display: flex; align-items: center; gap: 8px; margin: 12px 0 4px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,.07); font-size: 12px; opacity: .75; }
+.dsh-mem-sw i { position: absolute; inset: 0; background: rgba(127,127,127,.35); border-radius: 999px; transition: background .15s; }
+.dsh-mem-sw i::after { content: ""; position: absolute; top: 3px; left: 3px; width: 15px; height: 15px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform .15s; }
+.dsh-mem-sw input:checked + i { background: rgba(200,118,63,.75); }
+.dsh-mem-sw input:checked + i::after { transform: translateX(17px); }
+.dsh-mem-wshead { display: flex; align-items: center; gap: 8px; margin: 12px 0 4px; padding-top: 10px; border-top: 1px solid rgba(127,127,127,.22); font-size: 12px; opacity: .8; }
 .dsh-mem-list { max-height: 220px; overflow: auto; }
 .dsh-mem-ws { display: flex; align-items: center; gap: 9px; padding: 6px 6px; border-radius: 6px; cursor: pointer; font-size: 12.5px; }
-.dsh-mem-ws:hover { background: rgba(255,255,255,.05); }
+.dsh-mem-ws:hover { background: rgba(127,127,127,.12); }
 .dsh-mem-ws input { accent-color: #c8763f; width: 14px; height: 14px; flex: none; }
 .dsh-mem-ws .p { font-family: ui-monospace, Consolas, monospace; }
-.dsh-mem-ws .t { margin-left: auto; opacity: .55; font-size: 11.5px; white-space: nowrap; }
+.dsh-mem-ws .t { margin-left: auto; opacity: .6; font-size: 11.5px; white-space: nowrap; }
 .dsh-mem-field { display: block; margin-top: 10px; }
-.dsh-mem-field span { display: block; font-size: 12px; opacity: .65; margin-bottom: 5px; }
-.dsh-mem-field input { width: 100%; box-sizing: border-box; padding: 7px 9px; border-radius: 7px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1); color: inherit; font: inherit; font-size: 13px; }
+.dsh-mem-field span { display: block; font-size: 12px; opacity: .7; margin-bottom: 5px; }
+.dsh-mem-field input { width: 100%; box-sizing: border-box; padding: 7px 9px; border-radius: 7px; background: rgba(127,127,127,.07); border: 1px solid rgba(127,127,127,.35); color: inherit; font: inherit; font-size: 13px; }
 .dsh-mem-field input:focus { outline: none; border-color: #c8763f; }
 .dsh-mem-bar { display: flex; align-items: center; gap: 10px; }
-.dsh-mem-btn { font: inherit; font-size: 13px; padding: 7px 15px; border-radius: 7px; border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.06); color: inherit; cursor: pointer; }
+.dsh-mem-btn { font: inherit; font-size: 13px; padding: 7px 15px; border-radius: 7px; border: 1px solid rgba(127,127,127,.4); background: rgba(127,127,127,.09); color: inherit; cursor: pointer; }
 .dsh-mem-btn.primary { background: #c8763f; border-color: #c8763f; color: #1a1206; font-weight: 600; }
 .dsh-mem-btn:disabled { opacity: .5; cursor: default; }
-.dsh-mem-hint { font-size: 12px; opacity: .6; }
-.dsh-mem-pre { margin: 10px 0 0; padding: 10px 12px; border-radius: 8px; background: rgba(0,0,0,.35); font: 12px/1.5 ui-monospace, Consolas, monospace; white-space: pre-wrap; max-height: 260px; overflow: auto; }
+.dsh-mem-hint { font-size: 12px; opacity: .7; }
+.dsh-mem-pre {
+  margin: 10px 0 0; padding: 10px 12px; border-radius: 8px;
+  background: rgba(127,127,127,.07);
+  border: 1px solid rgba(127,127,127,.38);
+  color: inherit;
+  font: 12px/1.6 ui-monospace, Consolas, monospace;
+  white-space: pre-wrap; max-height: 260px; overflow: auto;
+}
 `;
 
 		const rel = (ms) => {
