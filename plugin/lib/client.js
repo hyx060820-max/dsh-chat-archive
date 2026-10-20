@@ -39,9 +39,18 @@ window.__ModuleLoader__.load({
 .dsh-mem-btn { font: inherit; font-size: 13px; padding: 7px 15px; border-radius: 7px; border: 1px solid rgba(127,127,127,.4); background: rgba(127,127,127,.09); color: inherit; cursor: pointer; }
 .dsh-mem-btn.primary { background: #c8763f; border-color: #c8763f; color: #1a1206; font-weight: 600; }
 .dsh-mem-btn:disabled { opacity: .5; cursor: default; }
-.dsh-mem-fill { font: inherit; font-size: 12px; padding: 4px 10px; border-radius: 999px; border: 1px solid rgba(127,127,127,.4); background: rgba(127,127,127,.09); color: inherit; cursor: pointer; white-space: nowrap; }
-.dsh-mem-fill:hover { border-color: #c8763f; }
-.dsh-mem-fill.done { background: rgba(200,118,63,.2); border-color: rgba(200,118,63,.65); }
+.dsh-mem-fill {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 28px; padding: 0 12px; margin-right: 6px;
+  border-radius: 999px; border: 1px solid rgba(127,127,127,.26);
+  background: transparent; color: inherit;
+  font: inherit; font-size: 12.5px; line-height: 1; white-space: nowrap;
+  opacity: .75; cursor: pointer;
+  transition: background .15s, border-color .15s, opacity .15s;
+}
+.dsh-mem-fill:hover { background: rgba(127,127,127,.12); border-color: rgba(127,127,127,.45); opacity: 1; }
+.dsh-mem-fill:active { background: rgba(127,127,127,.18); }
+.dsh-mem-fill.done { border-color: rgba(200,118,63,.65); background: rgba(200,118,63,.14); opacity: 1; }
 .dsh-mem-hint { font-size: 12px; opacity: .7; }
 .dsh-mem-note { padding: 12px 14px; border-radius: 10px; border: 1px dashed rgba(127,127,127,.45); background: rgba(200,118,63,.07); }
 .dsh-mem-note-t { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
@@ -263,7 +272,7 @@ window.__ModuleLoader__.load({
 					h(
 						"div",
 						{ className: "dsh-mem-hint", style: { marginTop: 8 } },
-						"只是藏起来，功能还在。想用的时候打开，点一下、回车。",
+						"只是藏起来，功能还在。一个会话点一次就够——掉细节的时候补，不用每轮点。",
 					),
 				),
 				// 关于我
@@ -507,7 +516,7 @@ window.__ModuleLoader__.load({
 			};
 			if (!show) return null;
 			const label = failed ? "没找到输入框" : done ? "已填入，回车" : "读关于我";
-			return h("button", { className: "dsh-mem-fill" + (done ? " done" : ""), onClick: click, title: "点一下把「" + FILL_TEXT + "」填进输入框" }, label);
+			return h("button", { className: "dsh-mem-fill" + (done ? " done" : ""), onClick: click, title: "一个会话点一次就够。把「" + FILL_TEXT + "」填进输入框，回车发送" }, label);
 		}
 		const inject = ["slots"];
 
