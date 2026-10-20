@@ -197,28 +197,39 @@ try {
   # ── 7d. 界面服务 ──
   Test-Check '界面服务能起来' {
     if (-not (Test-Path (Join-Path $repo 'ui/index.html'))) { throw '缺 ui/index.html' }
-    $port = 7700 + (Get-Random -Maximum 200)
-    $env:PORT = $port
-    $proc = Start-Process node -ArgumentList (Join-Path $repo 'server.mjs') -PassThru -WindowStyle Hidden
-    try {
-      $st = $null
-      for ($i = 0; $i -lt 40; $i++) {
-        Start-Sleep -Milliseconds 250
-        try {
-          $st = Invoke-RestMethod "http://127.0.0.1:$port/api/state" -TimeoutSec 2
-          break
-        } catch {
-          # 还没起来，接着等
+    $st = $null
+    $port = 0
+    $why = ''
+    # 端口可能被占。换三个都起不来才算失败，并把 node 的输出带上
+    foreach ($try in 1..3) {
+      $port = 7900 + (Get-Random -Maximum 400)
+      $env:PORT = "$port"
+      $outF = Join-Path $work "srv$try.log"
+      $errF = "$outF.err"
+      $proc = Start-Process node -ArgumentList (Join-Path $repo 'server.mjs') -PassThru `
+        -NoNewWindow -RedirectStandardOutput $outF -RedirectStandardError $errF
+      try {
+        for ($i = 0; $i -lt 30; $i++) {
+          Start-Sleep -Milliseconds 250
+          if ($proc.HasExited) { break }
+          try {
+            $st = Invoke-RestMethod "http://127.0.0.1:$port/api/state" -TimeoutSec 2
+            break
+          } catch {
+            # 还没起来，接着等
+          }
         }
+      } finally {
+        if ($proc -and -not $proc.HasExited) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
       }
-      if (-not $st) { throw '10 秒内没起来' }
-      if (-not $st.config.sources.dsh) { throw '/api/state 少了 config.sources.dsh' }
-      if ($null -eq $st.dsh.workspaces) { throw '/api/state 少了工作区列表' }
-      "端口 $port，工作区 $(@($st.dsh.workspaces).Count) 个"
-    } finally {
-      Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
-      Remove-Item Env:\PORT -ErrorAction SilentlyContinue
+      if ($st) { break }
+      $why = (((Get-Content $errF -Raw -ErrorAction SilentlyContinue) + (Get-Content $outF -Raw -ErrorAction SilentlyContinue)) + '').Trim()
     }
+    Remove-Item Env:\PORT -ErrorAction SilentlyContinue
+    if (-not $st) { throw ("三个端口都没起来。" + $why) }
+    if (-not $st.config.sources.dsh) { throw '/api/state 少了 config.sources.dsh' }
+    if ($null -eq $st.dsh.workspaces) { throw '/api/state 少了工作区列表' }
+    "端口 $port，工作区 $(@($st.dsh.workspaces).Count) 个"
   }
 
   # ── 8. 备份冒烟：dsh ──

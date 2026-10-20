@@ -29,6 +29,8 @@ const DEFAULTS = {
     dsh: { enabled: true, all: true, workspaces: [] },
     codex: { enabled: false },
   },
+  // 到点自己跑。只在 DSH 开着的时候有效
+  schedule: { enabled: false, at: '23:00', lastRun: null },
 };
 
 const expand = (p) => (p && p.startsWith('~') ? join(homedir(), p.slice(1)) : p);
@@ -47,6 +49,7 @@ function readSettings() {
       dsh: { ...DEFAULTS.sources.dsh, ...(saved.sources?.dsh ?? {}) },
       codex: { ...DEFAULTS.sources.codex, ...(saved.sources?.codex ?? {}) },
     },
+    schedule: { ...DEFAULTS.schedule, ...(saved.schedule ?? {}) },
   };
 }
 
@@ -168,6 +171,20 @@ function runBackup(s, format) {
   });
 }
 
+const dayKey = (d) => {
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+};
+
+// 手动和定时走同一条路
+async function runEnabled(s) {
+  const wanted = ['dsh', 'codex'].filter((k) => s.sources[k]?.enabled);
+  if (!wanted.length) return { ok: false, error: '两个来源都关着', results: [] };
+  const results = [];
+  for (const f of wanted) results.push(await runBackup(s, f));
+  return { ok: results.every((r) => r.code === 0), results, lastLog: latestLog(s) };
+}
+
 // ── 路由 ────────────────────────────────────────────────────
 const LOCAL_HOST_RE = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
 
@@ -251,7 +268,11 @@ function apply(ctx) {
         dsh: { ...cur.sources.dsh, ...(patch.settings?.sources?.dsh ?? {}) },
         codex: { ...cur.sources.codex, ...(patch.settings?.sources?.codex ?? {}) },
       },
+      schedule: { ...cur.schedule, ...(patch.settings?.schedule ?? {}) },
     };
+    if (!/^([01]?\d|2[0-3]):[0-5]\d$/.test(String(next.schedule.at ?? ''))) {
+      return sendJson(res, 400, { ok: false, error: `时间要写成 HH:mm，收到：${next.schedule.at}` });
+    }
     if (!next.repo || !existsSync(join(expand(next.repo), 'backup-chat.ps1'))) {
       return sendJson(res, 400, { ok: false, error: `脚本目录里没有 backup-chat.ps1：${next.repo}` });
     }
@@ -260,12 +281,66 @@ function apply(ctx) {
   });
 
   on('/dsh-memory/run', async (req, res) => {
+    const r = await runEnabled(readSettings());
+    if (r.error) return sendJson(res, 400, { ok: false, error: r.error });
+    sendJson(res, 200, r);
+  });
+
+  // 到点自己跑。每 30 秒看一眼钟，不精确到秒，够用
+  let running = false;
+  const tick = async () => {
+    if (running) return;
     const s = readSettings();
-    const wanted = ['dsh', 'codex'].filter((k) => s.sources[k]?.enabled);
-    if (!wanted.length) return sendJson(res, 400, { ok: false, error: '两个来源都关着' });
-    const results = [];
-    for (const f of wanted) results.push(await runBackup(s, f));
-    sendJson(res, 200, { ok: results.every((r) => r.code === 0), results, lastLog: latestLog(s) });
+    const sc = s.schedule ?? {};
+    if (!sc.enabled) return;
+
+    const now = new Date();
+    const today = dayKey(now);
+    const m = /^(\d{1,2}):(\d{2})$/.exec(String(sc.at ?? ''));
+    if (!m) return;
+    const target = new Date(now);
+    target.setHours(Number(m[1]), Number(m[2]), 0, 0);
+
+    // 还没到点，或者今天已经跑过
+    if (now < target) return;
+    if (sc.lastRun?.day === today) return;
+
+    running = true;
+    try {
+      const r = await runEnabled(s);
+      const next = readSettings();
+      next.schedule = {
+        ...next.schedule,
+        lastRun: {
+          day: today,
+          at: new Date().toISOString(),
+          ok: !!r.ok,
+          note: r.error ?? (r.results ?? []).map((x) => `${x.format} exit ${x.code}`).join('，'),
+        },
+      };
+      writeSettings(next);
+    } catch (e) {
+      const next = readSettings();
+      next.schedule = { ...next.schedule, lastRun: { day: today, at: new Date().toISOString(), ok: false, note: String(e?.message ?? e) } };
+      writeSettings(next);
+    } finally {
+      running = false;
+    }
+  };
+
+  const timer = setInterval(() => {
+    tick().catch(() => {});
+  }, 30000);
+  if (typeof timer.unref === 'function') timer.unref();
+  // 启动时也看一眼：今天点已经过了、还没跑过，就补上
+  const boot = setTimeout(() => {
+    tick().catch(() => {});
+  }, 5000);
+  if (typeof boot.unref === 'function') boot.unref();
+
+  ctx.effect(() => () => {
+    clearInterval(timer);
+    clearTimeout(boot);
   });
 
   ctx.effect(() => () => {

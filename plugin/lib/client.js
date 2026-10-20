@@ -211,6 +211,50 @@ window.__ModuleLoader__.load({
 						h(Switch, { checked: sc.enabled, title: "启用 Codex", onChange: (v) => mutate((n) => { n.sources.codex.enabled = v; }) }),
 					),
 				),
+				// 自动备份
+				h(
+					"div",
+					{ className: "dsh-mem-card" + (s.schedule.enabled ? "" : " off") },
+					h(
+						"div",
+						{ className: "dsh-mem-row" },
+						h(
+							"div",
+							{ className: "dsh-mem-grow" },
+							h("div", { className: "dsh-mem-name" }, "自动备份"),
+							h(
+								"div",
+								{ className: "dsh-mem-meta" },
+								s.schedule.enabled
+									? "每天 " + s.schedule.at + " 跑一次（DSH 开着的时候）"
+									: "关着。只有点上面的按钮才跑",
+							),
+						),
+						h(Switch, {
+							checked: s.schedule.enabled,
+							title: "启用自动备份",
+							onChange: (v) => mutate((n) => { n.schedule.enabled = v; }),
+						}),
+					),
+					h(
+						"label",
+						{ className: "dsh-mem-field" },
+						h("span", null, "时间（HH:mm）"),
+						h("input", {
+							value: s.schedule.at,
+							placeholder: "23:00",
+							onChange: (e) => mutate((n) => { n.schedule.at = e.target.value; }),
+						}),
+					),
+					s.schedule.lastRun
+						? h(
+								"div",
+								{ className: "dsh-mem-hint", style: { marginTop: 8 } },
+								"上次自动：" + s.schedule.lastRun.day + " · " + (s.schedule.lastRun.ok ? "成功" : "有问题"),
+								s.schedule.lastRun.note ? "（" + s.schedule.lastRun.note + "）" : "",
+							)
+						: null,
+				),
 				// 输出设置
 				h(
 					"div",
