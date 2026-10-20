@@ -39,6 +39,9 @@ window.__ModuleLoader__.load({
 .dsh-mem-btn { font: inherit; font-size: 13px; padding: 7px 15px; border-radius: 7px; border: 1px solid rgba(127,127,127,.4); background: rgba(127,127,127,.09); color: inherit; cursor: pointer; }
 .dsh-mem-btn.primary { background: #c8763f; border-color: #c8763f; color: #1a1206; font-weight: 600; }
 .dsh-mem-btn:disabled { opacity: .5; cursor: default; }
+.dsh-mem-fill { font: inherit; font-size: 12px; padding: 4px 10px; border-radius: 999px; border: 1px solid rgba(127,127,127,.4); background: rgba(127,127,127,.09); color: inherit; cursor: pointer; white-space: nowrap; }
+.dsh-mem-fill:hover { border-color: #c8763f; }
+.dsh-mem-fill.done { background: rgba(200,118,63,.2); border-color: rgba(200,118,63,.65); }
 .dsh-mem-hint { font-size: 12px; opacity: .7; }
 .dsh-mem-note { padding: 12px 14px; border-radius: 10px; border: 1px dashed rgba(127,127,127,.45); background: rgba(200,118,63,.07); }
 .dsh-mem-note-t { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
@@ -403,9 +406,68 @@ window.__ModuleLoader__.load({
 			);
 		}
 
+		// ── 输入框右边的「读关于我」按钮 ──
+		// 只负责把话填进输入框，不替你发送。
+		// 发送要 sessionId，而插槽不给——那个接口是内部结构，不碰。
+		const FILL_TEXT = "看一下关于我";
+
+		function fillComposer(text) {
+			const editable = (el) =>
+				el && (el.tagName === "TEXTAREA" || el.tagName === "INPUT" || el.isContentEditable);
+
+			let el = editable(document.activeElement) ? document.activeElement : null;
+			if (!el) {
+				const all = [...document.querySelectorAll('textarea, [contenteditable="true"]')].filter(
+					(n) => n.offsetParent !== null,
+				);
+				el = all[all.length - 1];
+			}
+			if (!el) return false;
+
+			el.focus();
+			if (el.tagName === "TEXTAREA" || el.tagName === "INPUT") {
+				const proto = el.tagName === "TEXTAREA" ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+				const setter = Object.getOwnPropertyDescriptor(proto, "value").set;
+				setter.call(el, text);
+				el.dispatchEvent(new Event("input", { bubbles: true }));
+				return true;
+			}
+			// contenteditable 编辑器：优先用插入文本，保住它自己的状态
+			try {
+				document.execCommand("insertText", false, text);
+				if ((el.textContent || "").includes(text)) return true;
+			} catch {
+				/* 继续往下兜底 */
+			}
+			el.textContent = text;
+			el.dispatchEvent(new InputEvent("input", { bubbles: true }));
+			return true;
+		}
+
+		function ReadButton() {
+			const [done, setDone] = react.useState(false);
+			const [failed, setFailed] = react.useState(false);
+			const click = () => {
+				const ok = fillComposer(FILL_TEXT);
+				setFailed(!ok);
+				setDone(ok);
+				setTimeout(() => {
+					setDone(false);
+					setFailed(false);
+				}, 1800);
+			};
+			const label = failed ? "没找到输入框" : done ? "已填入，回车" : "读关于我";
+			return h("button", { className: "dsh-mem-fill" + (done ? " done" : ""), onClick: click, title: "点一下把「" + FILL_TEXT + "」填进输入框" }, label);
+		}
 		const inject = ["slots"];
 
 		function apply(ctx) {
+			ctx.slots.inject("conversation.input.right", () =>
+				ctx.slots.register(
+					{ name: "conversation.input.right", id: "dsh-memory-fill", order: 200, label: () => "读关于我" },
+					ReadButton,
+				),
+			);
 			ctx.slots.inject("settings.section", () =>
 				ctx.slots.register(
 					{
